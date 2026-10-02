@@ -1,0 +1,28 @@
+{
+  "name": "clawd-base",
+  "owner": {
+    "name": "walidoudou",
+    "url": "https://github.com/walidoudou"
+  },
+  "metadata": {
+    "description": "Clawd Base — local real-time dashboard for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "clawd-base",
+      "source": "./",
+      "description": "Local, real-time pixel-art dashboard for Claude Code: sessions, sub-agents, workflows, tokens and diffs, shown as an animated underground base.",
+      "version": "1.0.0",
+      "author": {
+        "name": "walidoudou"
+      },
+      "license": "MIT",
+      "keywords": [
+        "dashboard",
+        "observability",
+        "pixel-art"
+      ]
+    }
+  ]
+}

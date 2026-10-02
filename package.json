@@ -1,0 +1,43 @@
+{
+  "name": "clawd-base",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local, real-time pixel-art dashboard for Claude Code: sessions, sub-agents, workflows, tokens and diffs, shown as an animated underground base.",
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/web"
+  ],
+  "scripts": {
+    "dev:server": "tsx watch packages/server/src/index.ts",
+    "dev:web": "npm run dev -w @dash/web",
+    "start": "node dist/server.mjs",
+    "build": "npm run build:web && npm run build:server",
+    "build:web": "npm run build -w @dash/web",
+    "build:server": "node scripts/build-server.mjs",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/web && tsc -p scripts",
+    "test": "vitest run",
+    "simulate": "tsx scripts/simulate.ts",
+    "dashboard": "node scripts/start.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/walidoudou/clawd-base.git"
+  }
+}
