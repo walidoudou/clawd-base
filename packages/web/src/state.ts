@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { stripWorkflowMarker } from '@dash/shared';
-import type { Agent, DashConfig, EntityKind, FileChange, LogEntry, PatchBatch, Session, Snapshot, ToolEvent, Workflow } from '@dash/shared';
+import type { Agent, DashConfig, EntityKind, FileChange, LogEntry, Message, PatchBatch, Session, Snapshot, ToolEvent, Workflow } from '@dash/shared';
 import { t } from './i18n/index.ts';
 
 export type Selection = { kind: 'agent'; id: string } | { kind: 'workflow'; id: string } | null;
@@ -32,6 +32,7 @@ export const data = {
   tools: new Map<string, ToolEvent>(),
   files: new Map<string, FileChange>(),
   workflows: new Map<string, Workflow>(),
+  messages: new Map<string, Message>(),
   /** Recent event log (all sessions), newest last. */
   logs: [] as LogEntry[],
 };
@@ -146,6 +147,7 @@ const MAPS: Record<EntityKind, Map<string, unknown>> = {
   tool: data.tools,
   file: data.files,
   workflow: data.workflows,
+  message: data.messages,
 };
 
 let frameRequested = false;
@@ -201,6 +203,7 @@ export function applySnapshot(s: Snapshot): void {
   for (const x of s.tools) data.tools.set(x.id, x);
   for (const x of s.files) data.files.set(x.id, x);
   for (const x of s.workflows) data.workflows.set(x.id, x);
+  for (const x of s.messages ?? []) data.messages.set(x.id, x);
   data.logs = s.logs.slice(-LOG_RING);
   knownWorkflows.clear();
   for (const w of s.workflows) knownWorkflows.add(w.id);
@@ -356,6 +359,13 @@ export function sessionLogs(sessionId: string, limit = 200): LogEntry[] {
     if (l.sessionId === sessionId) out.push(l);
   }
   return out;
+}
+
+/** Conversation of a session (or of one agent), oldest first. */
+export function conversation(sessionId: string, agentId?: string): Message[] {
+  const out: Message[] = [];
+  for (const m of data.messages.values()) if (m.sessionId === sessionId && (!agentId || m.agentId === agentId)) out.push(m);
+  return out.sort((a, b) => a.at - b.at);
 }
 
 export function sessionFiles(sessionId: string): FileChange[] {

@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { animationFor, formatTokens, mulberry32, type Agent, type Anim, type NarrationFocus, type Workflow } from '@dash/shared';
+import { animationFor, formatTokens, mulberry32, type Agent, type Anim, type Message, type NarrationFocus, type Workflow } from '@dash/shared';
 import { t } from '../i18n/index.ts';
 import { activeStepIndex, agentLabel, data, isActive, isArchived, mascotSeed, sessionAgents, sessionWorkflows, useDash } from '../state.ts';
 import { basename, formatDuration, modelBadge, preview } from '../format.ts';
@@ -12,7 +12,7 @@ import { ROOM_H, SLAB, type FillerKind, type Stations } from './tiles.ts';
 import { ParticleSystem } from './particles.ts';
 
 const STATUS_COLOR: Record<string, string> = { starting: '#6cc4ff', running: '#6cc4ff', idle: '#b9a8d6', done: '#7ee08f', error: '#ff6b6b' };
-const C = { text: 0xe8f0e0, muted: 0x9fb39f, tool: 0x6cc4ff, read: 0xc4d9ff, edit: 0xffd479, prompt: 0xd8cfe6, warn: 0xffd479, todo: 0xb5e48c };
+const C = { text: 0xe8f0e0, muted: 0x9fb39f, tool: 0x6cc4ff, read: 0xc4d9ff, edit: 0xffd479, prompt: 0xd8cfe6, reply: 0xa8e6cf, queued: 0xf2c14e, warn: 0xffd479, todo: 0xb5e48c };
 
 export interface FocusRect {
   key: string;
@@ -680,7 +680,7 @@ export class BaseScene {
     const main = agents.find((a) => a.kind === 'main');
     // Independent of the zoom (zooming must never reshuffle the rooms); the main room and three
     // agents, the most common case, share one row.
-    const maxRowWidth = Math.max(1320, Math.floor(this.app.screen.width / 2) - 40);
+    const maxRowWidth = Math.max(1600, Math.floor(this.app.screen.width / 2) - 40);
     const layout = computeLayout(main, agents, workflows, { compact, maxRowWidth });
     const firstLayoutForSession = this.centeredFor !== sessionId;
     const sig = `${layout.rooms.map((r) => `${r.key}@${r.x},${r.y},${r.w}`).join('|')}#${layout.levels}`;
@@ -695,6 +695,15 @@ export class BaseScene {
     }
     this.layout = layout;
 
+    // Conversation of each agent of the session (one pass, oldest first).
+    const messages = new Map<string, Message[]>();
+    for (const m of data.messages.values()) {
+      if (m.sessionId !== sessionId) continue;
+      const arr = messages.get(m.agentId);
+      if (arr) arr.push(m);
+      else messages.set(m.agentId, [m]);
+    }
+    for (const arr of messages.values()) arr.sort((x, y) => x.at - y.at);
     const seen = new Set<string>();
     const detail = this.zoom < 1.25 ? 'low' : 'full';
     let mostRecent: { key: string; at: number; level: number } | null = null;
@@ -724,7 +733,7 @@ export class BaseScene {
       else if (slot.entity === 'filler') info = this.fillerInfo(slot.kind, slot.key, slot.w);
       else {
         const a = data.agents.get(slot.id);
-        info = this.agentInfo(a, slot.kind, slot.w, selection?.kind === 'agent' && selection.id === slot.id, now, config.spriteSet);
+        info = this.agentInfo(a, slot.kind, slot.w, selection?.kind === 'agent' && selection.id === slot.id, now, config.spriteSet, messages.get(slot.id) ?? []);
         if (a && isActive(a) && (!mostRecent || a.lastActivityAt > mostRecent.at)) mostRecent = { key: slot.key, at: a.lastActivityAt, level: slot.level };
       }
       if (info) room.update(info);
@@ -799,7 +808,7 @@ export class BaseScene {
     if (this.packets.length > 60) this.packets.splice(0, this.packets.length - 60);
   }
 
-  private agentInfo(a: Agent | undefined, kind: RoomInfo['kind'], width: number, selected: boolean, now: number, spriteSet: string): RoomInfo | null {
+  private agentInfo(a: Agent | undefined, kind: RoomInfo['kind'], width: number, selected: boolean, now: number, spriteSet: string, msgs: Message[]): RoomInfo | null {
     if (!a) return null;
     const session = data.sessions.get(a.sessionId);
     const anim = animationFor(a, now, a.endedAt);
@@ -807,40 +816,64 @@ export class BaseScene {
     const files = Object.values(a.files).sort((x, y) => y.lastAt - x.lastAt);
     const board: BoardLine[] = [];
     const main = a.kind === 'main';
-    const maxLines = 5;
+    // Must match the board geometry (tiles.ts): lines that fit, characters per line.
+    const maxLines = main ? 9 : 10;
+    const cols = main ? 39 : 35;
+    const push = (text: string, color: number) => {
+      if (board.length < maxLines) board.push({ text, color });
+    };
+    /** A labelled text over up to `lines` board lines ("▸ Toi : …", continuation indented). */
+    const block = (prefix: string, text: string, color: number, lines: number) => {
+      const flat = text.replace(/\s+/g, ' ').trim();
+      if (!flat) return;
+      const out = wrap(`${prefix}${flat}`, cols);
+      out.slice(0, lines).forEach((l, i) => push(i === lines - 1 && out.length > lines ? `${l.slice(0, cols - 1)}…` : i ? `  ${l}` : l, color));
+    };
     const subsRunning = main ? [...data.agents.values()].filter((x) => x.sessionId === a.sessionId && x.kind === 'sub' && isActive(x)).length : 0;
-    if (a.waiting) board.push({ text: `? ${a.waiting}`, color: C.warn });
-    else if (a.currentTool) board.push({ text: `> ${toolDisplayName(a.currentTool)} ${a.currentToolInputPreview ?? ''}`, color: C.tool });
-    else if (isActive(a)) board.push({ text: `… ${t.thinking}`, color: C.muted });
-    else board.push({ text: subsRunning ? t.agentsRunning(subsRunning) : t.statusLabel[a.status], color: subsRunning ? C.tool : C.muted });
+    // 1. what it is doing right now
+    if (a.waiting) push(`? ${a.waiting}`, C.warn);
+    else if (a.currentTool) push(`> ${toolDisplayName(a.currentTool)} ${a.currentToolInputPreview ?? ''}`, C.tool);
+    else if (isActive(a)) push(`… ${t.thinking}`, C.muted);
+    else push(subsRunning ? t.agentsRunning(subsRunning) : t.statusLabel[a.status], subsRunning ? C.tool : C.muted);
+    if (main && subsRunning && (a.currentTool || isActive(a))) push(t.agentsRunning(subsRunning), C.tool);
+    // 2. todo list progress
     const doing = a.todos.find((x) => x.status === 'in_progress');
     if (doing) {
       const done = a.todos.filter((x) => x.status === 'completed').length;
-      board.push({ text: `☐ ${done}/${a.todos.length} ${doing.activeForm ?? doing.content}`, color: C.todo });
+      push(`☐ ${done}/${a.todos.length} ${doing.activeForm ?? doing.content}`, C.todo);
     }
-    for (const f of files.slice(0, 2)) {
+    // 3. messages typed while Claude works (queued, or just handed over mid-turn)
+    const queued = msgs.filter((m) => m.role === 'user' && m.state === 'queued');
+    const lastUser = [...msgs].reverse().find((m) => m.role === 'user' && m.state !== 'removed');
+    const lastReply = [...msgs].reverse().find((m) => m.role === 'assistant');
+    if (queued.length) block(`⏳ ${t.labelled(t.queuedN(queued.length), '')}`, queued[queued.length - 1]?.text ?? '', C.queued, 2);
+    // 4. the last thing asked, 5. the last answer
+    const asked = main ? (lastUser?.text ?? session?.lastPrompt ?? '') : a.prompt;
+    if (asked && !(queued.length && lastUser?.state === 'queued')) {
+      const midTurn = lastUser?.midTurn && now - lastUser.at < 60_000;
+      block(`${midTurn ? '↪' : '▸'} ${t.labelled(main ? t.you : t.task, '')}`, asked, midTurn ? C.queued : C.prompt, 2);
+    }
+    const reply = lastReply?.text ?? a.lastMessage ?? '';
+    if (reply) block(`◂ ${t.labelled('Claude', '')}`, reply, C.reply, 2);
+    // 6. last task done (recent)
+    const lastTask = [...msgs].reverse().find((m) => m.role === 'task');
+    if (lastTask && now - lastTask.at < 15 * 60_000) push(`✓ ${lastTask.text}`, C.todo);
+    // 7. files being worked on
+    for (const f of files) {
+      if (board.length >= maxLines) break;
       const live = now - f.lastAt < 30_000;
-      board.push({
-        text: `${f.lastOp === 'read' ? 'R' : 'W'} ${basename(f.path)}${f.edits ? ` +${f.added}/-${f.removed}` : ''}${live ? ' •' : ''}`,
-        color: f.lastOp === 'read' ? C.read : C.edit,
-      });
-    }
-    const promptText = main ? (session?.lastPrompt ?? '') : a.prompt;
-    if (promptText) {
-      for (const line of wrap(preview(promptText, 100), main ? 33 : 27)) {
-        if (board.length >= maxLines) break;
-        board.push({ text: line, color: C.prompt });
-      }
+      push(`${f.lastOp === 'read' ? 'R' : 'W'} ${basename(f.path)}${f.edits ? ` +${f.added}/-${f.removed}` : ''}${live ? ' •' : ''}`, f.lastOp === 'read' ? C.read : C.edit);
     }
     const u = a.usage;
     const title = main ? (session?.title ?? t.mainRoom) : agentLabel(a);
-    const window = session?.contextWindow ?? 200_000;
-    const ctx = a.contextTokens ? ` · ctx ${Math.round((a.contextTokens / window) * 100)}%` : '';
+    const window = a.contextWindow || session?.contextWindow || 200_000;
+    const windowLabel = window >= 1_000_000 ? `${Math.round(window / 100_000) / 10}M` : `${Math.round(window / 1000)}k`;
+    const ctx = a.contextTokens ? ` · ctx ${Math.round((a.contextTokens / window) * 100)}%/${windowLabel}` : '';
     const subtitle = `${modelBadge(a.model)} · ${a.waiting ? t.waitingShort : t.statusLabel[a.status]}${main ? (session ? ` · ${formatDuration((session.endedAt ?? now) - session.startedAt)}` : '') : ` · ${a.type}`}${ctx}`;
     const footer =
       kind === 'compact'
         ? `${t.statusLabel[a.status]}\nΣ${formatTokens(u.total)}\n+${a.added} -${a.removed}`
-        : `↓${formatTokens(u.input)} ↑${formatTokens(u.output)} ⛁${formatTokens(u.cacheCreate + u.cacheRead)} Σ${formatTokens(u.total)}   +${a.added} -${a.removed}`;
+        : `↓${formatTokens(u.input)} ↑${formatTokens(u.output)} ⛁${formatTokens(u.cacheCreate + u.cacheRead)} Σ${formatTokens(u.total)}   +${a.added} -${a.removed} · ${t.toolsShort(a.toolCount)} · ${t.msgsShort(msgs.length)}`;
     const live = a.liveText && (!a.liveTextFinal || now - a.liveTextAt < 6000) ? a.liveText : null;
     return {
       kind,

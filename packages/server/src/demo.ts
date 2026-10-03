@@ -101,6 +101,21 @@ export class Sim {
     return this.events([{ kind: 'narration', sessionId: this.sessionId, at: Date.now(), source: 'sim', narration: { step, total, title, text, at: Date.now(), focus, done } }]);
   }
 
+  /** Claude Code's prompt queue (a message typed while Claude works). */
+  queue(op: 'enqueue' | 'remove', text: string): Promise<void> {
+    return this.events([{ kind: 'message.queue', sessionId: this.sessionId, at: Date.now(), source: 'sim', agentId: this.sessionId, op, text }]);
+  }
+
+  /** A queued message handed to Claude inside the running turn. */
+  inject(text: string): Promise<void> {
+    return this.events([{ kind: 'message.inject', sessionId: this.sessionId, at: Date.now(), source: 'sim', agentId: this.sessionId, text }]);
+  }
+
+  /** A text reply from Claude (main thread when agentId is null). */
+  reply(agentId: string | null, text: string): Promise<void> {
+    return this.events([{ kind: 'assistant.text', sessionId: this.sessionId, at: Date.now(), source: 'sim', agentId: agentId ?? this.sessionId, text }]);
+  }
+
   /** One assistant message worth of token usage. */
   usage(agentId: string | null, model: string, scale = 1): Promise<void> {
     const main = agentId === null;
@@ -121,8 +136,10 @@ export class Sim {
 
   /** Push the main context near the limit, for the compaction step. */
   async inflateContext(target: number): Promise<void> {
+    // ~8 visible steps whatever the window (Opus 5.5 has 1M).
+    const stride = Math.max(18_000, Math.round((target - this.context) / 8));
     while (this.context < target) {
-      this.context = Math.min(target, this.context + rnd(18_000, 30_000));
+      this.context = Math.min(target, this.context + stride + rnd(0, stride / 4));
       await this.events([
         {
           kind: 'usage',
@@ -255,7 +272,7 @@ const TEXT = {
     title: 'Démo guidée — refonte du paiement',
     steps: [
       ['Une nouvelle session démarre', 'Claude Code démarre dans le projet « boutique-en-ligne ». La base creuse la salle principale et sa mascotte s’installe (une taupe, ou Clawd en option).'],
-      ['Le prompt de l’utilisateur', 'L’utilisateur demande une refonte du paiement. Le prompt s’affiche sur le tableau et la jauge de contexte commence à se remplir.'],
+      ['Le prompt de l’utilisateur', 'L’utilisateur demande une refonte du paiement, puis ajoute une précision pendant que Claude travaille : elle attend en file (⏳) et lui est remise en cours de route.'],
       ['Claude planifie', 'Claude écrit sa todo-list : la tâche en cours s’affiche sur le tableau (☐ 0/5). Cliquez sur une salle pour voir la liste complète.'],
       ['Lecture du code', 'Pour lire, la mascotte va à l’étagère, un parchemin à la main. Chaque fichier lu s’affiche en bleu (R) sur le tableau.'],
       ['Première modification', 'Pour éditer, elle tape au bureau et les lignes ajoutées ou supprimées s’envolent. Le diff exact est dans la vue Fichiers.'],
@@ -276,6 +293,8 @@ const TEXT = {
     end: ['Fin de la démo', 'Merci d’avoir suivi la visite ! D’ici une minute, les agents terminés quitteront la base un par un (le bouton « Archivés » les réaffiche). Relancez avec ▶ Démo.'],
     stopped: ['Démo arrêtée', 'La visite est interrompue. Relancez-la quand vous voulez avec ▶ Démo.'],
     prompt: 'Refactorise le module de paiement, ajoute des tests et audite la sécurité du checkout.',
+    followUp: 'Pense aussi aux remboursements partiels.',
+    replies: ['Je commence par lire le module de paiement, puis je corrige les arrondis (remboursements partiels compris).', 'Les tests passent. Je confie l’exploration à trois agents en parallèle.'],
     plan: ['Lire le module de paiement', 'Corriger les arrondis', 'Explorer et tester en parallèle', 'Auditer la sécurité', 'Rédiger le bilan'],
     task: 'Refonte du paiement',
     permission: 'Claude a besoin de votre permission pour utiliser Bash',
@@ -310,7 +329,7 @@ const TEXT = {
     title: 'Guided demo — payment refactor',
     steps: [
       ['A new session starts', 'Claude Code starts in the “online-shop” project. The base digs the main room and its mascot moves in (a mole, or Clawd optionally).'],
-      ['The user’s prompt', 'The user asks for a payment refactor. The prompt shows on the board and the context gauge starts filling up.'],
+      ['The user’s prompt', 'The user asks for a payment refactor, then adds a detail while Claude works: it waits in the queue (⏳) and is handed over mid-turn.'],
       ['Claude plans', 'Claude writes its todo list: the current task shows on the board (☐ 0/5). Click a room to see the full list.'],
       ['Reading code', 'To read, the mascot walks to the bookshelf with a scroll. Every file read shows in blue (R) on the board.'],
       ['First edit', 'To edit, it types at the desk and the added or removed lines fly away. The exact diff is in the Files view.'],
@@ -331,6 +350,8 @@ const TEXT = {
     end: ['End of the demo', 'Thanks for taking the tour! Within a minute, finished agents will leave the base one by one (the “Archived” button shows them again). Replay with ▶ Demo.'],
     stopped: ['Demo stopped', 'The tour was interrupted. Replay it any time with ▶ Demo.'],
     prompt: 'Refactor the payment module, add tests and audit the checkout security.',
+    followUp: 'Also handle partial refunds.',
+    replies: ['I will read the payment module first, then fix the rounding (partial refunds included).', 'Tests pass. I am handing the exploration to three agents in parallel.'],
     plan: ['Read the payment module', 'Fix rounding errors', 'Explore and test in parallel', 'Audit security', 'Write the summary'],
     task: 'Payment refactor',
     permission: 'Claude needs your permission to use Bash',
@@ -417,9 +438,15 @@ async function tour(s: Sim, L: (typeof TEXT)[DemoLocale]): Promise<void> {
     await s.hook('UserPromptSubmit', null, { prompt: L.prompt, prompt_id: randomUUID(), source: 'user' });
     await s.sleep(1200);
     await s.usage(null, opus);
+    // A second message typed while Claude works: queued, then handed over inside the turn.
+    await s.queue('enqueue', L.followUp);
+    await s.sleep(2600);
+    await s.queue('remove', L.followUp);
+    await s.inject(L.followUp);
   });
 
   await step(3, main, async () => {
+    await s.reply(null, L.replies[0]);
     await s.todos(null, plan);
     await s.hook('TaskCreated', null, { task_id: 'demo-task', task_subject: L.task });
   });
@@ -456,6 +483,7 @@ async function tour(s: Sim, L: (typeof TEXT)[DemoLocale]): Promise<void> {
     mark(1, 'completed');
     mark(2, 'in_progress');
     await s.todos(null, plan);
+    await s.reply(null, L.replies[1]);
   });
 
   // Three explorers dug next to the main room: the camera moves to them as they appear.
@@ -516,7 +544,7 @@ async function tour(s: Sim, L: (typeof TEXT)[DemoLocale]): Promise<void> {
   );
 
   await step(14, main, async () => {
-    await s.inflateContext(185_000);
+    await s.inflateContext(940_000);
     await s.sleep(1500);
     await s.hook('PostCompact', null, { trigger: 'auto' });
     s.resetContext(32_000);

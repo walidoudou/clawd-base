@@ -249,7 +249,7 @@ export class RoomView extends Container {
     this.title.position.set(g.plaque.x + 4, g.plaque.y + 2);
     this.subtitle.position.set(g.plaque.x + 4, g.plaque.y + (big ? 14 : 13));
     this.footer.position.set(g.footer.x, g.footer.y);
-    this.bigLabel.position.set(g.w / 2, 56);
+    this.bigLabel.position.set(g.w / 2, this.labelY());
     for (const t of this.boardTexts) t.destroy();
     this.boardTexts.length = 0;
     if (g.board) {
@@ -305,7 +305,7 @@ export class RoomView extends Container {
       this.bigLabelBg.clear();
       if (bigText) {
         const w = Math.min(g.w - 6, bigText.length * bigSize * CHAR_W + 14);
-        this.bigLabelBg.rect(g.w / 2 - w / 2, 56 - bigSize, w, bigSize * 2).fill({ color: 0x0b090e, alpha: 0.82 }).stroke({ width: 2, color: 0x4b3d5e });
+        this.bigLabelBg.rect(g.w / 2 - w / 2, this.labelY() - bigSize, w, bigSize * 2).fill({ color: 0x0b090e, alpha: 0.82 }).stroke({ width: 2, color: 0x4b3d5e });
       }
     }
     this.lamp.texture = lampTexture(info.waiting ? '#f2c14e' : info.statusColor, info.lampOn);
@@ -685,6 +685,11 @@ export class RoomView extends Container {
     } else if (info.waiting) {
       this.glowG.circle(lx, ly, 12).fill({ color: 0xf2c14e, alpha: 0.12 + 0.18 * Math.abs(Math.sin(now / 300)) });
     }
+  }
+
+  /** Height of the big low-zoom label: the middle of the wall. */
+  private labelY(): number {
+    return Math.round((this.geo?.h ?? 128) * 0.42);
   }
 
   /** Seed of the mascot/room textures (released when the room goes away). */

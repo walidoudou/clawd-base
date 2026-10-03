@@ -204,3 +204,30 @@ describe('TranscriptParser — real-world lines', () => {
     expect(parse([synthetic]).filter((e) => e.kind === 'usage')).toEqual([]);
   });
 });
+
+describe('TranscriptParser — queue, mid-turn messages, model window', () => {
+  const at = (sec: number) => new Date(Date.UTC(2026, 9, 2, 20, 52, sec)).toISOString();
+  const parse = (lines: unknown[]) => {
+    const p = new TranscriptParser({ sessionId: SID, agentId: null });
+    return lines.flatMap((l) => p.parseLine(JSON.stringify(l)));
+  };
+  it('turns queue operations and queued_command attachments into events', () => {
+    const evs = parse([
+      { type: 'queue-operation', operation: 'enqueue', timestamp: at(1), sessionId: SID, content: 'et ajoute Y' },
+      { type: 'queue-operation', operation: 'remove', timestamp: at(9), sessionId: SID, content: 'et ajoute Y' },
+      { type: 'attachment', timestamp: at(9), sessionId: SID, attachment: { type: 'queued_command', prompt: [{ type: 'text', text: 'et ajoute Y' }], commandMode: 'prompt', origin: { kind: 'human' } } },
+      { type: 'attachment', timestamp: at(10), sessionId: SID, attachment: { type: 'queued_command', prompt: '<task-notification>\n<task-id>bg1</task-id>\n<status>completed</status>\n</task-notification>', commandMode: 'task-notification' } },
+    ]);
+    const rel = evs.filter((e) => e.kind !== 'session.start');
+    expect(rel.map((e) => e.kind)).toEqual(['message.queue', 'message.queue', 'message.inject', 'agent.stop']);
+    expect(rel[2]).toMatchObject({ text: 'et ajoute Y' });
+    expect(rel[3]).toMatchObject({ agentId: 'bg1', status: 'done' });
+  });
+  it('reads the context window from the model identity and from /context', () => {
+    const evs = parse([
+      { type: 'attachment', timestamp: at(1), sessionId: SID, attachment: { type: 'model', identity: { modelId: 'claude-sonnet-4-6[1m]', marketingName: 'Sonnet 4.6 (1M context)' } } },
+      { type: 'system', timestamp: at(2), sessionId: SID, contextUsage: { model: 'claude-opus-5-5', total_tokens: 189477, raw_max_tokens: 1000000, percentage: 19 } },
+    ]);
+    expect(evs.filter((e) => e.kind === 'context.window').map((e) => (e as { window: number }).window)).toEqual([1_000_000, 1_000_000]);
+  });
+});

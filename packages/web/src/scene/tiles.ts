@@ -6,11 +6,13 @@ import { mulberry32, hashString } from '@dash/shared';
 
 export const TILE = 16;
 /** Every room has the same height so the base reads as a building with levels. */
-export const ROOM_H = 128;
+export const ROOM_H = 176;
 /** Concrete slab (with cable duct) between levels. */
 export const SLAB = 16;
 export const LEVEL = ROOM_H + SLAB;
-export const FLOOR_Y = 104;
+export const FLOOR_Y = 152;
+/** Extra wall height compared with the first (128 px) rooms: wall decor keeps its place above the desk. */
+const WALL = FLOOR_Y - 104;
 
 export const PAL = {
   outline: '#0b090e',
@@ -351,50 +353,50 @@ export interface RoomGeometry {
   footer: { x: number; y: number };
 }
 
-export const ROOM_WIDTH: Record<AgentRoomKind, number> = { main: 352, chief: 352, agent: 288, compact: 160 };
+export const ROOM_WIDTH: Record<AgentRoomKind, number> = { main: 448, chief: 448, agent: 352, compact: 176 };
 
 export function roomGeometry(kind: RoomKind, width?: number): RoomGeometry {
   const floorY = FLOOR_Y;
   switch (kind) {
     case 'main':
       return {
-        w: 352, h: ROOM_H, floorY, mascotScale: 2,
-        stations: { read: 36, desk: 96, bash: 158, board: 186, rest: 96, door: 12 },
-        plaque: { x: 8, y: 12, w: 186, h: 24 },
-        board: { x: 196, y: 38, w: 148, h: 46 },
+        w: 448, h: ROOM_H, floorY, mascotScale: 2,
+        stations: { read: 36, desk: 96, bash: 158, board: 232, rest: 96, door: 12 },
+        plaque: { x: 8, y: 10, w: 210, h: 26 },
+        board: { x: 226, y: 12, w: 196, h: 104 },
         screen: { x: 86, y: floorY - 38, w: 22, h: 11 },
-        lamp: { x: 336, y: 14 },
-        footer: { x: 8, y: 113 },
+        lamp: { x: 434, y: 14 },
+        footer: { x: 8, y: ROOM_H - 15 },
       };
     case 'chief':
       return {
-        w: 352, h: ROOM_H, floorY, mascotScale: 3,
+        w: 448, h: ROOM_H, floorY, mascotScale: 3,
         stations: { read: 60, desk: 60, bash: 60, board: 60, rest: 60, door: 12 },
-        plaque: { x: 8, y: 12, w: 220, h: 24 },
-        board: { x: 128, y: 42, w: 216, h: 54 },
+        plaque: { x: 8, y: 10, w: 260, h: 26 },
+        board: { x: 128, y: 44, w: 296, h: 90 },
         screen: null,
-        lamp: { x: 336, y: 14 },
-        footer: { x: 8, y: 113 },
+        lamp: { x: 434, y: 14 },
+        footer: { x: 8, y: ROOM_H - 15 },
       };
     case 'compact':
       return {
-        w: 160, h: ROOM_H, floorY, mascotScale: 2,
+        w: 176, h: ROOM_H, floorY, mascotScale: 2,
         stations: { read: 36, desk: 36, bash: 36, board: 36, rest: 36, door: 8 },
-        plaque: { x: 4, y: 12, w: 152, h: 14 },
+        plaque: { x: 4, y: 12, w: 168, h: 14 },
         board: null,
         screen: { x: 26, y: floorY - 38, w: 18, h: 9 },
-        lamp: { x: 146, y: 30 },
-        footer: { x: 62, y: 46 },
+        lamp: { x: 162, y: 30 },
+        footer: { x: 66, y: 46 + WALL },
       };
     case 'agent':
       return {
-        w: 288, h: ROOM_H, floorY, mascotScale: 2,
-        stations: { read: 30, desk: 80, bash: 137, board: 152, rest: 80, door: 10 },
-        plaque: { x: 6, y: 12, w: 150, h: 24 },
-        board: { x: 160, y: 32, w: 122, h: 50 },
+        w: 352, h: ROOM_H, floorY, mascotScale: 2,
+        stations: { read: 30, desk: 80, bash: 137, board: 186, rest: 80, door: 10 },
+        plaque: { x: 6, y: 10, w: 168, h: 26 },
+        board: { x: 180, y: 12, w: 156, h: 98 },
         screen: { x: 70, y: floorY - 38, w: 22, h: 11 },
-        lamp: { x: 272, y: 14 },
-        footer: { x: 6, y: 113 },
+        lamp: { x: 342, y: 14 },
+        footer: { x: 6, y: ROOM_H - 15 },
       };
     default: {
       const w = width ?? 160;
@@ -405,7 +407,7 @@ export function roomGeometry(kind: RoomKind, width?: number): RoomGeometry {
         board: null,
         screen: null,
         lamp: { x: w - 14, y: 14 },
-        footer: { x: 6, y: 113 },
+        footer: { x: 6, y: ROOM_H - 15 },
       };
     }
   }
@@ -449,17 +451,17 @@ export function drawRoom(kind: RoomKind, seedKey: string, width?: number): HTMLC
 
   if (kind === 'main') {
     roomShell(ctx, g.w, rng, 'warm');
-    wallShelf(ctx, 8, 40, 60, rng);
-    wallShelf(ctx, 8, 64, 48, rng);
+    wallShelf(ctx, 8, 40 + WALL, 60, rng);
+    wallShelf(ctx, 8, 64 + WALL, 48, rng);
     hangingLamp(ctx, 120, 4);
-    poster(ctx, 128, 44);
-    clock(ctx, 166, 46);
+    poster(ctx, 128, 44 + WALL);
+    clock(ctx, 166, 46 + WALL);
     rug(ctx, 50, F, 120);
     desk(ctx, 62, F, 70);
     monitor(ctx, 84, F - 22);
     terminalRack(ctx, 146, F);
     plant(ctx, 178, F, true);
-    door(ctx, 330, F);
+    door(ctx, 426, F);
   } else if (kind === 'chief') {
     roomShell(ctx, g.w, rng, 'purple', true);
     hangingLamp(ctx, 56, 4);
@@ -471,10 +473,10 @@ export function drawRoom(kind: RoomKind, seedKey: string, width?: number): HTMLC
     roomShell(ctx, g.w, rng, 'purple');
     desk(ctx, 10, F, 52);
     monitor(ctx, 22, F - 22);
-    plant(ctx, 142, F);
+    plant(ctx, 158, F);
   } else if (kind === 'agent') {
     roomShell(ctx, g.w, rng, rng() < 0.5 ? 'purple' : 'teal');
-    wallShelf(ctx, 6, 44, 52, rng);
+    wallShelf(ctx, 6, 44 + WALL, 52, rng);
     hangingLamp(ctx, 76, 4);
     rug(ctx, 40, F, 76);
     desk(ctx, 48, F, 66);

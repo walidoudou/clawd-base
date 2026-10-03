@@ -1,6 +1,6 @@
-import type { Agent, FileChange, Session, ToolEvent, Workflow } from './types.ts';
+import type { Agent, FileChange, Message, Session, ToolEvent, Workflow } from './types.ts';
 
-export type EntityKind = 'session' | 'agent' | 'tool' | 'file' | 'workflow';
+export type EntityKind = 'session' | 'agent' | 'tool' | 'file' | 'workflow' | 'message';
 
 export interface EntityMap {
   session: Session;
@@ -8,6 +8,7 @@ export interface EntityMap {
   tool: ToolEvent;
   file: FileChange;
   workflow: Workflow;
+  message: Message;
 }
 
 export type Upsert = { [K in EntityKind]: { op: 'upsert'; kind: K; data: EntityMap[K] } }[EntityKind];
@@ -44,6 +45,7 @@ export interface Snapshot {
   tools: ToolEvent[];
   files: FileChange[];
   workflows: Workflow[];
+  messages: Message[];
   logs: LogEntry[];
 }
 

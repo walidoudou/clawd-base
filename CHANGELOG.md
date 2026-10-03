@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0
+
+- Context window per model, like Claude Code's catalog: Opus 4.7+, Sonnet 5+ and Fable are 1M (the gauge said 200k on 1M sessions); `/context` and the model identity in the transcript are used when present; sub-agents get their own window.
+- Live conversation: every message sent and received, messages typed while Claude works (shown queued ⏳, then delivered mid-turn), slash commands, and tasks/todos completed — in the room board and a new "Conversation" section of the agent panel.
+- Background agents finishing through Claude Code's queue are now detected.
+- Bigger rooms (main and workflow rooms 448 px, agents 352 px, taller walls) with larger boards (9–10 lines): current activity, todo, queued message, your last message, Claude's last reply, last task done, files; footer adds tool and message counts; subtitle shows `ctx 25%/1M`.
+- Guided demo shows a queued message delivered mid-turn and Claude's replies; its context fill matches the 1M window.
+
 ## 1.1.0
 
 - Guided demo, smoother camera: it now keeps framing its subject (a room, a group of new agents, a workflow step) while rooms appear, shrink or move, instead of aiming once at a fixed point. Moves and zooms glide on a spring, the framing avoids the caption box and the side panel, and half zoom steps are used on 2× screens.

@@ -1,5 +1,5 @@
 import type { NormalizedEvent } from './events.ts';
-import { usageFromApi } from './usage.ts';
+import { contextWindowFor, usageFromApi } from './usage.ts';
 import { LIMITS, stringifyOutput, truncateRecord, truncateText } from './truncate.ts';
 import { EDIT_TOOLS, READ_TOOLS, filePathOf, makeFileChange, makeReadChange, resolveFileDiff } from './diff.ts';
 
@@ -163,10 +163,51 @@ export class TranscriptParser {
       case 'user':
         this.parseUser(o, base, agentId, out);
         break;
+      case 'queue-operation': {
+        // Messages typed while Claude works: enqueued at once, then handed over (dequeue/remove).
+        const op = str(o['operation']);
+        if (op === 'enqueue' || op === 'dequeue' || op === 'remove') out.push({ ...base, kind: 'message.queue', agentId, op, text: str(o['content']) });
+        break;
+      }
+      case 'attachment':
+        this.parseAttachment(obj(o['attachment']), base, agentId, out);
+        break;
       default:
         break;
     }
+    // /context writes the exact window the usage is measured against.
+    const usage = obj(o['contextUsage']);
+    if (usage && typeof usage['raw_max_tokens'] === 'number' && usage['raw_max_tokens'] > 0) {
+      out.push({ ...base, kind: 'context.window', agentId, window: usage['raw_max_tokens'] as number });
+    }
     return out;
+  }
+
+  private parseAttachment(a: Obj | null, base: { sessionId: string; at: number; source: 'transcript' }, agentId: string, out: NormalizedEvent[]): void {
+    if (!a) return;
+    switch (a['type']) {
+      case 'queued_command': {
+        // A queued message given to Claude inside the running turn, or a background agent's notification.
+        const p = a['prompt'];
+        const text = typeof p === 'string' ? p : Array.isArray(p) ? p.map((b) => str(obj(b)?.['text'])).filter(Boolean).join('\n') : '';
+        if (!text) return;
+        if (a['commandMode'] === 'task-notification' || text.trimStart().startsWith('<task-notification>')) {
+          for (const n of parseTaskNotifications(text)) {
+            for (const id of n.taskIds) out.push({ ...base, kind: 'agent.stop', agentId: id, status: notificationStatus(n.status), lastMessage: n.summary });
+          }
+          return;
+        }
+        if (a['commandMode'] === undefined || a['commandMode'] === 'prompt') out.push({ ...base, kind: 'message.inject', agentId, text: truncateText(text, 4000) });
+        return;
+      }
+      case 'model': {
+        // The model of the session as Claude Code resolved it ("claude-opus-5-5[1m]", "Opus 5.5 (1M context)").
+        const id = obj(a['identity']);
+        const name = `${str(id?.['modelId']) ?? ''} ${str(id?.['marketingName']) ?? ''}`.trim();
+        if (name) out.push({ ...base, kind: 'context.window', agentId, window: contextWindowFor(name) });
+        return;
+      }
+    }
   }
 
   private parseAssistant(o: Obj, base: { sessionId: string; at: number; source: 'transcript' }, agentId: string, out: NormalizedEvent[]): void {

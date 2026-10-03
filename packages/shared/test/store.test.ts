@@ -181,14 +181,14 @@ describe('real 2.1.288 hook schema fields', () => {
 });
 
 describe('StateStore — context, timeline, live state', () => {
-  const usageEv = (at: number, messageId: string, input: number, cacheRead: number, output = 10) => ({
+  const usageEv = (at: number, messageId: string, input: number, cacheRead: number, output = 10, model = 'claude-haiku-4-5-20251001') => ({
     kind: 'usage' as const,
     sessionId: SID,
     at,
     source: 'transcript' as const,
     agentId: SID,
     messageId,
-    model: 'claude-opus-5-5',
+    model,
     usage: { input, output, cacheCreate: 0, cacheRead, total: input + output + cacheRead },
   });
 
@@ -201,6 +201,16 @@ describe('StateStore — context, timeline, live state', () => {
     expect(s.sessions.get(SID)?.contextWindow).toBe(200_000);
     s.apply(usageEv(9000, 'm3', 10, 250_000));
     expect(s.sessions.get(SID)?.contextWindow).toBe(1_000_000);
+  });
+
+  it('the window follows the model: Opus 5.5 is natively 1M, even at 189k', () => {
+    const s = new StateStore();
+    s.apply(usageEv(1000, 'm1', 10, 189_000, 10, 'claude-opus-5-5'));
+    expect(s.sessions.get(SID)?.contextWindow).toBe(1_000_000);
+    expect(s.agents.get(SID)?.contextWindow).toBe(1_000_000);
+    // /context (or the model identity) is authoritative, e.g. with 1M disabled
+    s.apply({ kind: 'context.window', sessionId: SID, at: 2000, source: 'transcript', agentId: SID, window: 200_000 });
+    expect(s.sessions.get(SID)?.contextWindow).toBe(200_000);
   });
 
   it('tokens are bucketed per minute without double counting', () => {
@@ -461,5 +471,68 @@ describe('StateStore — lifecycle edge cases', () => {
     expect(s.agents.get('agA')?.parentTurn).toBe(1);
     expect(s.agents.get('agB')?.parentTurn).toBe(2);
     expect([...s.workflows.values()].filter((w) => w.sessionId === SID)).toEqual([]);
+  });
+});
+
+describe('StateStore — live conversation', () => {
+  const prompt = (text: string, at: number, id = `p-${at}`) => hook({ hook_event_name: 'UserPromptSubmit', prompt: text, prompt_id: id }, at);
+  const queue = (op: 'enqueue' | 'dequeue' | 'remove', text: string | null, at: number) => ({ kind: 'message.queue' as const, sessionId: SID, at, source: 'transcript' as const, agentId: SID, op, text });
+  const msgs = (s: StateStore) => [...s.messages.values()].filter((m) => m.sessionId === SID).sort((a, b) => a.at - b.at);
+
+  it('records sent prompts and Claude replies in order', () => {
+    const s = new StateStore();
+    s.applyAll(prompt('bonjour', 1000));
+    s.apply({ kind: 'assistant.text', sessionId: SID, at: 2000, source: 'transcript', agentId: SID, text: 'Salut !' });
+    s.apply({ kind: 'assistant.text', sessionId: SID, at: 2000, source: 'transcript', agentId: SID, text: 'Salut !' }); // replayed line
+    expect(msgs(s).map((m) => [m.role, m.text, m.state])).toEqual([
+      ['user', 'bonjour', 'sent'],
+      ['assistant', 'Salut !', 'sent'],
+    ]);
+  });
+
+  it('a message typed while Claude works shows as queued, then delivered inside the running turn', () => {
+    const s = new StateStore();
+    s.applyAll(prompt('fais X', 1000));
+    s.apply(queue('enqueue', 'et ajoute Y', 5000));
+    expect(msgs(s)[1]).toMatchObject({ text: 'et ajoute Y', state: 'queued' });
+    s.apply(queue('remove', 'et ajoute Y', 9000));
+    s.apply({ kind: 'message.inject', sessionId: SID, at: 9001, source: 'transcript', agentId: SID, text: 'et ajoute Y' });
+    expect(msgs(s)[1]).toMatchObject({ state: 'delivered', midTurn: true });
+    expect(msgs(s)).toHaveLength(2);
+    expect(s.sessions.get(SID)?.lastPrompt).toBe('et ajoute Y');
+  });
+
+  it('a queued message answered after the turn becomes a normal prompt, without a duplicate', () => {
+    const s = new StateStore();
+    s.apply(queue('enqueue', 'question', 1000));
+    s.apply(queue('dequeue', null, 1005));
+    s.applyAll(prompt('question', 1016));
+    expect(msgs(s).map((m) => m.state)).toEqual(['sent']); // delivered at once: it never waited
+    s.apply(queue('enqueue', 'suite', 3000));
+    s.applyAll(prompt('suite', 20_000));
+    expect(msgs(s).map((m) => m.state)).toEqual(['sent', 'delivered']);
+  });
+
+  it('a slash command goes through the queue and never comes back as a prompt: dequeue delivers it', () => {
+    const s = new StateStore();
+    s.apply(queue('enqueue', '/context', 1000));
+    s.apply(queue('dequeue', null, 1030));
+    expect(msgs(s).map((m) => [m.text, m.state])).toEqual([['/context', 'sent']]);
+    // a prompt line that does follow a dequeue is merged, not duplicated
+    s.apply(queue('enqueue', 'et ensuite ?', 5000));
+    s.apply(queue('dequeue', null, 9000));
+    s.applyAll(prompt('et ensuite ?', 9010));
+    expect(msgs(s).map((m) => [m.text, m.state])).toEqual([['/context', 'sent'], ['et ensuite ?', 'delivered']]);
+  });
+
+  it('background notifications in the queue are not user messages; completed todos and tasks are', () => {
+    const s = new StateStore();
+    s.apply(queue('enqueue', '<task-notification>\n<task-id>x</task-id>\n</task-notification>', 1000));
+    expect(msgs(s)).toEqual([]);
+    const todos = (status: 'pending' | 'completed', at: number) => s.apply({ kind: 'todos', sessionId: SID, at, source: 'hook', agentId: SID, todos: [{ content: 'Écrire les tests', status, activeForm: null }] });
+    todos('pending', 2000);
+    todos('completed', 3000);
+    todos('completed', 4000);
+    expect(msgs(s).map((m) => [m.role, m.text])).toEqual([['task', 'Écrire les tests']]);
   });
 });

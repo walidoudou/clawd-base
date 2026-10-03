@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
-import { animationFor, type Agent, type FileChange, type ToolEvent } from '@dash/shared';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { animationFor, type Agent, type FileChange, type Message, type ToolEvent } from '@dash/shared';
 import { t } from '../i18n/index.ts';
-import { agentFileChanges, agentLabel, agentTools, data, mascotSeed, useDash } from '../state.ts';
+import { agentFileChanges, agentLabel, agentTools, conversation, data, mascotSeed, useDash } from '../state.ts';
 import { basename, formatDuration, formatTime, modelBadge } from '../format.ts';
 import { MascotCanvas } from './MascotCanvas.tsx';
 import { TokenBreakdown } from './TokenBreakdown.tsx';
@@ -11,6 +11,51 @@ import { CATEGORY_COLOR, toolCategory, toolDisplayName } from '../tools.ts';
 
 function StatusPill({ status }: { status: Agent['status'] }) {
   return <span className={`pill st-${status}`}>{t.statusLabel[status]}</span>;
+}
+
+const ROLE_ICON: Record<Message['role'], string> = { user: '▸', assistant: '◂', task: '✓' };
+
+/** Live conversation: what was sent, received, queued while Claude worked, and tasks done. */
+function Conversation({ agent }: { agent: Agent }) {
+  const msgs = conversation(agent.sessionId, agent.id).slice(-80);
+  const list = useRef<HTMLOListElement>(null);
+  const stick = useRef(true);
+  const last = msgs[msgs.length - 1];
+  // Follow new messages, unless the user scrolled up to read.
+  useEffect(() => {
+    const el = list.current;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
+  }, [last?.id, last?.state]);
+  return (
+    <section>
+      <h3>
+        {t.conversation} <span className="muted small">({msgs.length})</span>
+      </h3>
+      {msgs.length === 0 ? (
+        <p className="muted small">{t.noMessages}</p>
+      ) : (
+        <ol
+          className="convo"
+          ref={list}
+          aria-live="polite"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+          }}
+        >
+          {msgs.map((m) => (
+            <li key={m.id} className={`convo-msg convo-${m.role} convo-${m.state}`}>
+              <div className="convo-meta">
+                <span aria-hidden>{ROLE_ICON[m.role]}</span> <strong>{t.msgRole[m.role]}</strong> <span className="muted">{formatTime(m.at)}</span>
+                {m.state !== 'sent' && <span className={`convo-badge convo-badge-${m.state}`}>{m.midTurn && m.state === 'delivered' ? t.midTurn : t.msgState[m.state]}</span>}
+              </div>
+              <div className="convo-text">{m.text}</div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
 }
 
 function toolSummary(tl: ToolEvent): string {
@@ -229,6 +274,7 @@ export function AgentPanel({ agent }: { agent: Agent }) {
           <pre className="prompt-block live-block">{agent.liveText}</pre>
         </section>
       )}
+      <Conversation agent={agent} />
       <Todos agent={agent} />
       {agent.prompt && (
         <section>
@@ -236,7 +282,7 @@ export function AgentPanel({ agent }: { agent: Agent }) {
           <pre className="prompt-block">{agent.prompt}</pre>
         </section>
       )}
-      {agent.lastMessage && (
+      {agent.lastMessage && !conversation(agent.sessionId, agent.id).some((m) => m.role === 'assistant') && (
         <section>
           <h3>{t.lastMessage}</h3>
           <pre className="prompt-block muted">{agent.lastMessage}</pre>
@@ -246,7 +292,7 @@ export function AgentPanel({ agent }: { agent: Agent }) {
       <section>
         <h3>{t.tokenBreakdown}</h3>
         <TokenBreakdown usage={agent.usage} />
-        {agent.contextTokens > 0 && <ContextGauge used={agent.contextTokens} window={data.sessions.get(agent.sessionId)?.contextWindow ?? 200_000} compactions={agent.compactions} wide />}
+        {agent.contextTokens > 0 && <ContextGauge used={agent.contextTokens} window={agent.contextWindow || (data.sessions.get(agent.sessionId)?.contextWindow ?? 200_000)} compactions={agent.compactions} wide />}
       </section>
 
       <SubAgents agent={agent} />

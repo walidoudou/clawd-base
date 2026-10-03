@@ -1,8 +1,9 @@
 import type { NormalizedEvent } from './events.ts';
-import type { Agent, FileChange, Session, TodoItem, ToolEvent, Workflow } from './types.ts';
+import type { Agent, FileChange, Message, Session, TodoItem, ToolEvent, Workflow } from './types.ts';
 import { EMPTY_USAGE } from './types.ts';
 import type { EntityKind, EntityMap, LogEntry, PatchBatch, Removal, Snapshot, Upsert } from './protocol.ts';
-import { UsageLedger } from './usage.ts';
+import { UsageLedger, WINDOW_1M, WINDOW_200K, contextWindowFor } from './usage.ts';
+import { hashString } from './mascot.ts';
 import { LIMITS, truncateText } from './truncate.ts';
 import { AGENT_TOOLS } from './transcript.ts';
 import { detectWorkflows, nativeWorkflowName, type NativeWorkflowCall, type SpawnRecord } from './workflow.ts';
@@ -14,8 +15,11 @@ const STALE_BUSY_MS = 60 * 60 * 1000;
 const PROMPT_DEDUP_MS = 60 * 1000;
 const TIMELINE_MINUTES = 180;
 const MINUTE = 60_000;
-const DEFAULT_WINDOW = 200_000;
-const LARGE_WINDOW = 1_000_000;
+/** Messages kept per session (oldest dropped first). */
+const MESSAGES_PER_SESSION = 400;
+const MESSAGE_CHARS = 4000;
+/** A queued message delivered this fast was never really waiting: it is a normal prompt. */
+const QUEUE_INSTANT_MS = 1500;
 const LIVE_TEXT_CHARS = 1200;
 /** Simulated sessions (ids starting with "sim-") are forgotten after this idle time. */
 const SIM_TTL_MS = 15 * 60 * 1000;
@@ -77,6 +81,7 @@ function newAgent(p: Partial<Agent> & Pick<Agent, 'id' | 'sessionId' | 'kind'>, 
     turns: 0,
     contextTokens: 0,
     contextAt: 0,
+    contextWindow: WINDOW_200K,
     compactions: 0,
     todos: [],
     liveText: null,
@@ -158,6 +163,13 @@ export class StateStore {
   private readonly workflowDirty = new Set<string>();
   /** Message currently streamed per agent (MessageDisplay). */
   private readonly liveMessage = new Map<string, string>();
+  readonly messages = new Map<string, Message>();
+  /** Per session, message ids in arrival order (for the cap and lookups). */
+  private readonly messageQueue = new Map<string, string[]>();
+  /** Queued messages taken out of the queue (dequeue) whose prompt line may still follow: merged, not duplicated. */
+  private readonly dequeued = new Set<string>();
+  /** Context window set by an authoritative source (model identity, /context): wins over the model guess. */
+  private readonly pinnedWindow = new Map<string, number>();
 
   private readonly dirty = new Map<string, { kind: EntityKind; id: string }>();
   private readonly removals = new Map<string, Removal>();
@@ -190,7 +202,7 @@ export class StateStore {
   }
 
   private entity<K extends EntityKind>(kind: K, id: string): EntityMap[K] | undefined {
-    const m = { session: this.sessions, agent: this.agents, tool: this.tools, file: this.files, workflow: this.workflows }[kind];
+    const m = { session: this.sessions, agent: this.agents, tool: this.tools, file: this.files, workflow: this.workflows, message: this.messages }[kind];
     return m.get(id) as EntityMap[K] | undefined;
   }
 
@@ -225,6 +237,7 @@ export class StateStore {
       tools: [...this.tools.values()],
       files: [...this.files.values()],
       workflows: [...this.workflows.values()],
+      messages: [...this.messages.values()],
       logs: [...this.logRing],
     };
   }
@@ -263,7 +276,7 @@ export class StateStore {
         lastPrompt: null,
         totalCostUSD: null,
         usageTimeline: { start: Math.floor(at / MINUTE) * MINUTE, buckets: [] },
-        contextWindow: DEFAULT_WINDOW,
+        contextWindow: WINDOW_200K,
         tasks: [],
         narration: null,
       };
@@ -376,6 +389,52 @@ export class StateStore {
    * giving a new job after end_turn, a task notification followed by more work… Any activity
    * strictly newer than the end brings the agent back to "running".
    */
+  /** Context window of an agent: authoritative value if known, else from its model; a context above it proves 1M. */
+  private setWindow(s: Session, a: Agent): void {
+    let w = this.pinnedWindow.get(a.id) ?? contextWindowFor(a.model);
+    if (a.contextTokens > w) w = WINDOW_1M;
+    a.contextWindow = w;
+    if (a.kind === 'main' && s.contextWindow !== w) {
+      s.contextWindow = w;
+      this.mark('session', s.id);
+    }
+  }
+
+  private addMessage(m: Message): void {
+    if (this.messages.has(m.id)) return;
+    this.messages.set(m.id, { ...m, text: truncateText(m.text, MESSAGE_CHARS) });
+    this.mark('message', m.id);
+    let q = this.messageQueue.get(m.sessionId);
+    if (!q) this.messageQueue.set(m.sessionId, (q = []));
+    q.push(m.id);
+    while (q.length > MESSAGES_PER_SESSION) {
+      const old = q.shift() as string;
+      this.messages.delete(old);
+      this.remove('message', old);
+    }
+  }
+
+  /** A dequeued message waiting for its prompt line, with this text. */
+  private findDequeued(sessionId: string, text: string): Message | undefined {
+    const key = text.trim();
+    for (const id of this.dequeued) {
+      const m = this.messages.get(id);
+      if (m && m.sessionId === sessionId && m.text.trim() === key) return m;
+    }
+    return undefined;
+  }
+
+  /** Latest user message of a session with this text, in one of these states. */
+  private findMessage(sessionId: string, text: string, states: Message['state'][]): Message | undefined {
+    const key = text.trim();
+    const q = this.messageQueue.get(sessionId) ?? [];
+    for (let i = q.length - 1; i >= 0 && i >= q.length - 80; i--) {
+      const m = this.messages.get(q[i] as string);
+      if (m && m.role === 'user' && states.includes(m.state) && m.text.trim() === key) return m;
+    }
+    return undefined;
+  }
+
   private revive(a: Agent, at: number): void {
     if ((a.status === 'done' || a.status === 'error') && a.endedAt !== null && at > a.endedAt) {
       this.staleDone.delete(a.id);
@@ -402,7 +461,14 @@ export class StateStore {
       this.staleDone.delete(k);
       this.lastCompactAt.delete(k);
       this.lastErrorAt.delete(k);
+      this.pinnedWindow.delete(k);
     }
+    for (const mid of this.messageQueue.get(id) ?? []) {
+      this.messages.delete(mid);
+      this.dequeued.delete(mid);
+      this.remove('message', mid);
+    }
+    this.messageQueue.delete(id);
     for (const [tu, holder] of this.spawns) if (agentIds.has(holder)) this.spawns.delete(tu);
     for (const [k, v] of this.tools) if (v.sessionId === id) { this.tools.delete(k); this.remove('tool', k); }
     for (const [k, v] of this.files) if (v.sessionId === id) { this.files.delete(k); this.remove('file', k); }
@@ -526,7 +592,73 @@ export class StateStore {
           a.waiting = null;
           if (s.status === 'ended') { s.status = 'active'; s.endedAt = null; }
         }
+        // A message typed while Claude was busy was shown as queued: it is now delivered.
+        const queued = this.findMessage(s.id, ev.text, ['queued', 'removed']) ?? this.findDequeued(s.id, ev.text);
+        if (queued) {
+          if (queued.state === 'queued' || queued.state === 'removed') queued.state = ev.at - queued.at < QUEUE_INSTANT_MS ? 'sent' : 'delivered';
+          this.dequeued.delete(queued.id);
+          this.mark('message', queued.id);
+        } else this.addMessage({ id: `u:${s.id}:${ev.promptId ?? `${ev.at}:${hashString(ev.text.slice(0, 300))}`}`, sessionId: s.id, agentId: a.id, at: ev.at, role: 'user', text: ev.text, state: 'sent', midTurn: false });
         this.log(ev, truncateText(ev.text.replace(/\s+/g, ' '), 80), a.id);
+        break;
+      }
+      case 'message.queue': {
+        if (ev.op === 'dequeue') {
+          // Claude Code takes the oldest message out of the queue: it is handed over (a slash
+          // command never comes back as a prompt line, so this is the only sign it was used).
+          const q = this.messageQueue.get(s.id) ?? [];
+          for (const id of q) {
+            const m = this.messages.get(id);
+            if (m?.role !== 'user' || m.state !== 'queued') continue;
+            m.state = ev.at - m.at < QUEUE_INSTANT_MS ? 'sent' : 'delivered';
+            this.dequeued.add(m.id);
+            if (this.dequeued.size > 200) this.dequeued.delete(this.dequeued.values().next().value as string);
+            this.mark('message', m.id);
+            break;
+          }
+          break;
+        }
+        if (!ev.text) break;
+        const text = ev.text.trim();
+        // Background agents' notifications travel through the same queue: not user messages.
+        if (!text || text.startsWith('<')) break;
+        if (ev.op === 'enqueue') {
+          if (this.findMessage(s.id, text, ['queued'])) break;
+          this.addMessage({ id: `q:${s.id}:${ev.at}:${hashString(text.slice(0, 300))}`, sessionId: s.id, agentId: ev.agentId, at: ev.at, role: 'user', text, state: 'queued', midTurn: false });
+          this.log(ev, truncateText(text.replace(/\s+/g, ' '), 80), ev.agentId);
+        } else {
+          const m = this.findMessage(s.id, text, ['queued']);
+          if (m) {
+            m.state = 'removed';
+            this.mark('message', m.id);
+          }
+        }
+        break;
+      }
+      case 'message.inject': {
+        // Claude received a queued message inside its running turn (no new prompt, no new turn).
+        const text = ev.text.trim();
+        if (!text) break;
+        const a = this.ensureAgent(s.id, ev.agentId, ev.at);
+        const m = this.findMessage(s.id, text, ['queued', 'removed']);
+        if (m) {
+          m.state = 'delivered';
+          m.midTurn = true;
+          this.mark('message', m.id);
+        } else if (!this.findMessage(s.id, text, ['delivered'])) {
+          this.addMessage({ id: `i:${s.id}:${ev.at}:${hashString(text.slice(0, 300))}`, sessionId: s.id, agentId: a.id, at: ev.at, role: 'user', text, state: 'delivered', midTurn: true });
+        }
+        if (a.kind === 'main') s.lastPrompt = truncateText(text, 300);
+        a.waiting = null;
+        this.mark('agent', a.id);
+        this.log(ev, truncateText(text.replace(/\s+/g, ' '), 80), a.id);
+        break;
+      }
+      case 'context.window': {
+        const a = this.ensureAgent(s.id, ev.agentId, ev.at);
+        this.pinnedWindow.set(a.id, ev.window);
+        this.setWindow(s, a);
+        this.mark('agent', a.id);
         break;
       }
       case 'agent.spawn': {
@@ -729,12 +861,12 @@ export class StateStore {
         if (ev.at >= a.contextAt) {
           a.contextAt = ev.at;
           a.contextTokens = ev.usage.input + ev.usage.cacheCreate + ev.usage.cacheRead;
-          if (a.contextTokens > DEFAULT_WINDOW && s.contextWindow < LARGE_WINDOW) s.contextWindow = LARGE_WINDOW;
         }
         if (ev.model && ev.model !== '<synthetic>') {
           a.model = ev.model;
           if (a.kind === 'main') s.model = ev.model;
         }
+        this.setWindow(s, a);
         this.mark('agent', a.id);
         break;
       }
@@ -742,6 +874,7 @@ export class StateStore {
         const a = this.ensureAgent(s.id, ev.agentId, ev.at);
         this.revive(a, ev.at);
         a.lastMessage = ev.text;
+        this.addMessage({ id: `a:${a.id}:${ev.at}:${hashString(ev.text.slice(0, 300))}`, sessionId: s.id, agentId: a.id, at: ev.at, role: 'assistant', text: ev.text, state: 'sent', midTurn: false });
         this.mark('agent', a.id);
         break;
       }
@@ -800,6 +933,12 @@ export class StateStore {
       }
       case 'todos': {
         const a = this.ensureAgent(s.id, ev.agentId, ev.at);
+        const before = new Map(a.todos.map((t) => [t.content, t.status]));
+        for (const t of ev.todos) {
+          if (t.status === 'completed' && before.has(t.content) && before.get(t.content) !== 'completed') {
+            this.addMessage({ id: `t:${a.id}:${hashString(t.content)}`, sessionId: s.id, agentId: a.id, at: ev.at, role: 'task', text: t.content, state: 'sent', midTurn: false });
+          }
+        }
         a.todos = ev.todos;
         this.mark('agent', a.id);
         break;
@@ -839,7 +978,10 @@ export class StateStore {
           s.tasks = [...s.tasks, { id: ev.taskId, subject: ev.subject, description: ev.description, status: ev.status, agentId: ev.agentId, at: ev.at }].slice(-200);
           this.log(ev, ev.subject);
         }
-        if (ev.status === 'completed' && existing) this.log(ev, `✓ ${ev.subject}`);
+        if (ev.status === 'completed' && existing) {
+          this.log(ev, `✓ ${ev.subject}`);
+          this.addMessage({ id: `k:${s.id}:${ev.taskId}`, sessionId: s.id, agentId: ev.agentId ?? s.id, at: ev.at, role: 'task', text: existing.subject, state: 'sent', midTurn: false });
+        }
         break;
       }
       case 'narration':

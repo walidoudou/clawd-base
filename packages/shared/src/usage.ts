@@ -71,3 +71,24 @@ export function formatTokens(n: number): string {
   if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
   return `${(n / 1_000_000).toFixed(2)}M`;
 }
+
+export const WINDOW_200K = 200_000;
+export const WINDOW_1M = 1_000_000;
+
+/**
+ * Context window of a model, as in Claude Code's model catalog (2.1.288): Opus 4.7+, Sonnet 5+ and
+ * Fable are natively 1M; older models are 200k unless run with the `[1m]` suffix.
+ */
+export function contextWindowFor(model: string | null | undefined): number {
+  if (!model) return WINDOW_200K;
+  const m = model.toLowerCase();
+  if (m.includes('[1m]') || m.includes('1m context')) return WINDOW_1M;
+  const v = /claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(m);
+  if (!v) return WINDOW_200K;
+  const family = v[1];
+  const version = Number(v[2]) + (v[3] ? Number(v[3]) / 10 : 0);
+  if (family === 'fable') return WINDOW_1M;
+  if (family === 'opus' && version >= 4.7) return WINDOW_1M;
+  if (family === 'sonnet' && version >= 5) return WINDOW_1M;
+  return WINDOW_200K;
+}

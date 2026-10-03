@@ -37036,6 +37036,21 @@ var UsageLedger = class {
     return this.byMessage.size;
   }
 };
+var WINDOW_200K = 2e5;
+var WINDOW_1M = 1e6;
+function contextWindowFor(model) {
+  if (!model) return WINDOW_200K;
+  const m = model.toLowerCase();
+  if (m.includes("[1m]") || m.includes("1m context")) return WINDOW_1M;
+  const v = /claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(m);
+  if (!v) return WINDOW_200K;
+  const family = v[1];
+  const version = Number(v[2]) + (v[3] ? Number(v[3]) / 10 : 0);
+  if (family === "fable") return WINDOW_1M;
+  if (family === "opus" && version >= 4.7) return WINDOW_1M;
+  if (family === "sonnet" && version >= 5) return WINDOW_1M;
+  return WINDOW_200K;
+}
 
 // packages/shared/src/truncate.ts
 var LIMITS = {
@@ -37717,10 +37732,46 @@ var TranscriptParser = class {
       case "user":
         this.parseUser(o, base, agentId, out);
         break;
+      case "queue-operation": {
+        const op = str2(o["operation"]);
+        if (op === "enqueue" || op === "dequeue" || op === "remove") out.push({ ...base, kind: "message.queue", agentId, op, text: str2(o["content"]) });
+        break;
+      }
+      case "attachment":
+        this.parseAttachment(obj(o["attachment"]), base, agentId, out);
+        break;
       default:
         break;
     }
+    const usage = obj(o["contextUsage"]);
+    if (usage && typeof usage["raw_max_tokens"] === "number" && usage["raw_max_tokens"] > 0) {
+      out.push({ ...base, kind: "context.window", agentId, window: usage["raw_max_tokens"] });
+    }
     return out;
+  }
+  parseAttachment(a, base, agentId, out) {
+    if (!a) return;
+    switch (a["type"]) {
+      case "queued_command": {
+        const p = a["prompt"];
+        const text = typeof p === "string" ? p : Array.isArray(p) ? p.map((b) => str2(obj(b)?.["text"])).filter(Boolean).join("\n") : "";
+        if (!text) return;
+        if (a["commandMode"] === "task-notification" || text.trimStart().startsWith("<task-notification>")) {
+          for (const n of parseTaskNotifications(text)) {
+            for (const id of n.taskIds) out.push({ ...base, kind: "agent.stop", agentId: id, status: notificationStatus(n.status), lastMessage: n.summary });
+          }
+          return;
+        }
+        if (a["commandMode"] === void 0 || a["commandMode"] === "prompt") out.push({ ...base, kind: "message.inject", agentId, text: truncateText(text, 4e3) });
+        return;
+      }
+      case "model": {
+        const id = obj(a["identity"]);
+        const name = `${str2(id?.["modelId"]) ?? ""} ${str2(id?.["marketingName"]) ?? ""}`.trim();
+        if (name) out.push({ ...base, kind: "context.window", agentId, window: contextWindowFor(name) });
+        return;
+      }
+    }
   }
   parseAssistant(o, base, agentId, out) {
     const msg = obj(o["message"]);
@@ -37871,6 +37922,19 @@ function identifyTranscript(path) {
   const main2 = /\/([0-9a-f-]{36})\.jsonl$/i.exec(norm);
   if (main2) return { sessionId: main2[1], agentId: null, kind: "main" };
   return null;
+}
+
+// packages/shared/src/sprites/index.ts
+var DEFAULT_SPRITE_SET = "mole";
+
+// packages/shared/src/mascot.ts
+function hashString(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }
 
 // packages/shared/src/workflow.ts
@@ -38060,8 +38124,9 @@ var STALE_BUSY_MS = 60 * 60 * 1e3;
 var PROMPT_DEDUP_MS = 60 * 1e3;
 var TIMELINE_MINUTES = 180;
 var MINUTE = 6e4;
-var DEFAULT_WINDOW = 2e5;
-var LARGE_WINDOW = 1e6;
+var MESSAGES_PER_SESSION = 400;
+var MESSAGE_CHARS = 4e3;
+var QUEUE_INSTANT_MS = 1500;
 var LIVE_TEXT_CHARS = 1200;
 var SIM_TTL_MS = 15 * 60 * 1e3;
 var DUP_WINDOW_MS = 60 * 1e3;
@@ -38111,6 +38176,7 @@ function newAgent(p, at) {
     turns: 0,
     contextTokens: 0,
     contextAt: 0,
+    contextWindow: WINDOW_200K,
     compactions: 0,
     todos: [],
     liveText: null,
@@ -38182,6 +38248,13 @@ var StateStore = class {
   workflowDirty = /* @__PURE__ */ new Set();
   /** Message currently streamed per agent (MessageDisplay). */
   liveMessage = /* @__PURE__ */ new Map();
+  messages = /* @__PURE__ */ new Map();
+  /** Per session, message ids in arrival order (for the cap and lookups). */
+  messageQueue = /* @__PURE__ */ new Map();
+  /** Queued messages taken out of the queue (dequeue) whose prompt line may still follow: merged, not duplicated. */
+  dequeued = /* @__PURE__ */ new Set();
+  /** Context window set by an authoritative source (model identity, /context): wins over the model guess. */
+  pinnedWindow = /* @__PURE__ */ new Map();
   dirty = /* @__PURE__ */ new Map();
   removals = /* @__PURE__ */ new Map();
   pendingLogs = [];
@@ -38208,7 +38281,7 @@ var StateStore = class {
     this.removals.set(key, { op: "remove", kind, id });
   }
   entity(kind, id) {
-    const m = { session: this.sessions, agent: this.agents, tool: this.tools, file: this.files, workflow: this.workflows }[kind];
+    const m = { session: this.sessions, agent: this.agents, tool: this.tools, file: this.files, workflow: this.workflows, message: this.messages }[kind];
     return m.get(id);
   }
   get hasPending() {
@@ -38240,6 +38313,7 @@ var StateStore = class {
       tools: [...this.tools.values()],
       files: [...this.files.values()],
       workflows: [...this.workflows.values()],
+      messages: [...this.messages.values()],
       logs: [...this.logRing]
     };
   }
@@ -38274,7 +38348,7 @@ var StateStore = class {
         lastPrompt: null,
         totalCostUSD: null,
         usageTimeline: { start: Math.floor(at / MINUTE) * MINUTE, buckets: [] },
-        contextWindow: DEFAULT_WINDOW,
+        contextWindow: WINDOW_200K,
         tasks: [],
         narration: null
       };
@@ -38391,6 +38465,48 @@ var StateStore = class {
    * giving a new job after end_turn, a task notification followed by more work… Any activity
    * strictly newer than the end brings the agent back to "running".
    */
+  /** Context window of an agent: authoritative value if known, else from its model; a context above it proves 1M. */
+  setWindow(s, a) {
+    let w = this.pinnedWindow.get(a.id) ?? contextWindowFor(a.model);
+    if (a.contextTokens > w) w = WINDOW_1M;
+    a.contextWindow = w;
+    if (a.kind === "main" && s.contextWindow !== w) {
+      s.contextWindow = w;
+      this.mark("session", s.id);
+    }
+  }
+  addMessage(m) {
+    if (this.messages.has(m.id)) return;
+    this.messages.set(m.id, { ...m, text: truncateText(m.text, MESSAGE_CHARS) });
+    this.mark("message", m.id);
+    let q = this.messageQueue.get(m.sessionId);
+    if (!q) this.messageQueue.set(m.sessionId, q = []);
+    q.push(m.id);
+    while (q.length > MESSAGES_PER_SESSION) {
+      const old = q.shift();
+      this.messages.delete(old);
+      this.remove("message", old);
+    }
+  }
+  /** A dequeued message waiting for its prompt line, with this text. */
+  findDequeued(sessionId, text) {
+    const key = text.trim();
+    for (const id of this.dequeued) {
+      const m = this.messages.get(id);
+      if (m && m.sessionId === sessionId && m.text.trim() === key) return m;
+    }
+    return void 0;
+  }
+  /** Latest user message of a session with this text, in one of these states. */
+  findMessage(sessionId, text, states) {
+    const key = text.trim();
+    const q = this.messageQueue.get(sessionId) ?? [];
+    for (let i = q.length - 1; i >= 0 && i >= q.length - 80; i--) {
+      const m = this.messages.get(q[i]);
+      if (m && m.role === "user" && states.includes(m.state) && m.text.trim() === key) return m;
+    }
+    return void 0;
+  }
   revive(a, at) {
     if ((a.status === "done" || a.status === "error") && a.endedAt !== null && at > a.endedAt) {
       this.staleDone.delete(a.id);
@@ -38416,7 +38532,14 @@ var StateStore = class {
       this.staleDone.delete(k);
       this.lastCompactAt.delete(k);
       this.lastErrorAt.delete(k);
+      this.pinnedWindow.delete(k);
     }
+    for (const mid of this.messageQueue.get(id) ?? []) {
+      this.messages.delete(mid);
+      this.dequeued.delete(mid);
+      this.remove("message", mid);
+    }
+    this.messageQueue.delete(id);
     for (const [tu, holder] of this.spawns) if (agentIds.has(holder)) this.spawns.delete(tu);
     for (const [k, v] of this.tools) if (v.sessionId === id) {
       this.tools.delete(k);
@@ -38548,7 +38671,68 @@ var StateStore = class {
             s.endedAt = null;
           }
         }
+        const queued = this.findMessage(s.id, ev.text, ["queued", "removed"]) ?? this.findDequeued(s.id, ev.text);
+        if (queued) {
+          if (queued.state === "queued" || queued.state === "removed") queued.state = ev.at - queued.at < QUEUE_INSTANT_MS ? "sent" : "delivered";
+          this.dequeued.delete(queued.id);
+          this.mark("message", queued.id);
+        } else this.addMessage({ id: `u:${s.id}:${ev.promptId ?? `${ev.at}:${hashString(ev.text.slice(0, 300))}`}`, sessionId: s.id, agentId: a.id, at: ev.at, role: "user", text: ev.text, state: "sent", midTurn: false });
         this.log(ev, truncateText(ev.text.replace(/\s+/g, " "), 80), a.id);
+        break;
+      }
+      case "message.queue": {
+        if (ev.op === "dequeue") {
+          const q = this.messageQueue.get(s.id) ?? [];
+          for (const id of q) {
+            const m = this.messages.get(id);
+            if (m?.role !== "user" || m.state !== "queued") continue;
+            m.state = ev.at - m.at < QUEUE_INSTANT_MS ? "sent" : "delivered";
+            this.dequeued.add(m.id);
+            if (this.dequeued.size > 200) this.dequeued.delete(this.dequeued.values().next().value);
+            this.mark("message", m.id);
+            break;
+          }
+          break;
+        }
+        if (!ev.text) break;
+        const text = ev.text.trim();
+        if (!text || text.startsWith("<")) break;
+        if (ev.op === "enqueue") {
+          if (this.findMessage(s.id, text, ["queued"])) break;
+          this.addMessage({ id: `q:${s.id}:${ev.at}:${hashString(text.slice(0, 300))}`, sessionId: s.id, agentId: ev.agentId, at: ev.at, role: "user", text, state: "queued", midTurn: false });
+          this.log(ev, truncateText(text.replace(/\s+/g, " "), 80), ev.agentId);
+        } else {
+          const m = this.findMessage(s.id, text, ["queued"]);
+          if (m) {
+            m.state = "removed";
+            this.mark("message", m.id);
+          }
+        }
+        break;
+      }
+      case "message.inject": {
+        const text = ev.text.trim();
+        if (!text) break;
+        const a = this.ensureAgent(s.id, ev.agentId, ev.at);
+        const m = this.findMessage(s.id, text, ["queued", "removed"]);
+        if (m) {
+          m.state = "delivered";
+          m.midTurn = true;
+          this.mark("message", m.id);
+        } else if (!this.findMessage(s.id, text, ["delivered"])) {
+          this.addMessage({ id: `i:${s.id}:${ev.at}:${hashString(text.slice(0, 300))}`, sessionId: s.id, agentId: a.id, at: ev.at, role: "user", text, state: "delivered", midTurn: true });
+        }
+        if (a.kind === "main") s.lastPrompt = truncateText(text, 300);
+        a.waiting = null;
+        this.mark("agent", a.id);
+        this.log(ev, truncateText(text.replace(/\s+/g, " "), 80), a.id);
+        break;
+      }
+      case "context.window": {
+        const a = this.ensureAgent(s.id, ev.agentId, ev.at);
+        this.pinnedWindow.set(a.id, ev.window);
+        this.setWindow(s, a);
+        this.mark("agent", a.id);
         break;
       }
       case "agent.spawn": {
@@ -38744,12 +38928,12 @@ var StateStore = class {
         if (ev.at >= a.contextAt) {
           a.contextAt = ev.at;
           a.contextTokens = ev.usage.input + ev.usage.cacheCreate + ev.usage.cacheRead;
-          if (a.contextTokens > DEFAULT_WINDOW && s.contextWindow < LARGE_WINDOW) s.contextWindow = LARGE_WINDOW;
         }
         if (ev.model && ev.model !== "<synthetic>") {
           a.model = ev.model;
           if (a.kind === "main") s.model = ev.model;
         }
+        this.setWindow(s, a);
         this.mark("agent", a.id);
         break;
       }
@@ -38757,6 +38941,7 @@ var StateStore = class {
         const a = this.ensureAgent(s.id, ev.agentId, ev.at);
         this.revive(a, ev.at);
         a.lastMessage = ev.text;
+        this.addMessage({ id: `a:${a.id}:${ev.at}:${hashString(ev.text.slice(0, 300))}`, sessionId: s.id, agentId: a.id, at: ev.at, role: "assistant", text: ev.text, state: "sent", midTurn: false });
         this.mark("agent", a.id);
         break;
       }
@@ -38811,6 +38996,12 @@ var StateStore = class {
       }
       case "todos": {
         const a = this.ensureAgent(s.id, ev.agentId, ev.at);
+        const before = new Map(a.todos.map((t) => [t.content, t.status]));
+        for (const t of ev.todos) {
+          if (t.status === "completed" && before.has(t.content) && before.get(t.content) !== "completed") {
+            this.addMessage({ id: `t:${a.id}:${hashString(t.content)}`, sessionId: s.id, agentId: a.id, at: ev.at, role: "task", text: t.content, state: "sent", midTurn: false });
+          }
+        }
         a.todos = ev.todos;
         this.mark("agent", a.id);
         break;
@@ -38849,7 +39040,10 @@ var StateStore = class {
           s.tasks = [...s.tasks, { id: ev.taskId, subject: ev.subject, description: ev.description, status: ev.status, agentId: ev.agentId, at: ev.at }].slice(-200);
           this.log(ev, ev.subject);
         }
-        if (ev.status === "completed" && existing) this.log(ev, `\u2713 ${ev.subject}`);
+        if (ev.status === "completed" && existing) {
+          this.log(ev, `\u2713 ${ev.subject}`);
+          this.addMessage({ id: `k:${s.id}:${ev.taskId}`, sessionId: s.id, agentId: ev.agentId ?? s.id, at: ev.at, role: "task", text: existing.subject, state: "sent", midTurn: false });
+        }
         break;
       }
       case "narration":
@@ -39266,16 +39460,13 @@ function hookToEvents(payload, now = Date.now()) {
 }
 var SNAPSHOT_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
-// packages/shared/src/sprites/index.ts
-var DEFAULT_SPRITE_SET = "mole";
-
 // packages/server/src/config.ts
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 var APP_ID = "clawd-base";
-var VERSION = "1.1.0";
+var VERSION = "1.2.0";
 var DEFAULT_PORT = 4317;
 function env(name) {
   return process.env[`CLAWD_BASE_${name}`] ?? process.env[`CLAUDE_DASH_${name}`];
@@ -41889,6 +42080,18 @@ var Sim = class {
   narrate(step, total, title, text, focus = null, done = false) {
     return this.events([{ kind: "narration", sessionId: this.sessionId, at: Date.now(), source: "sim", narration: { step, total, title, text, at: Date.now(), focus, done } }]);
   }
+  /** Claude Code's prompt queue (a message typed while Claude works). */
+  queue(op, text) {
+    return this.events([{ kind: "message.queue", sessionId: this.sessionId, at: Date.now(), source: "sim", agentId: this.sessionId, op, text }]);
+  }
+  /** A queued message handed to Claude inside the running turn. */
+  inject(text) {
+    return this.events([{ kind: "message.inject", sessionId: this.sessionId, at: Date.now(), source: "sim", agentId: this.sessionId, text }]);
+  }
+  /** A text reply from Claude (main thread when agentId is null). */
+  reply(agentId, text) {
+    return this.events([{ kind: "assistant.text", sessionId: this.sessionId, at: Date.now(), source: "sim", agentId: agentId ?? this.sessionId, text }]);
+  }
   /** One assistant message worth of token usage. */
   usage(agentId, model, scale = 1) {
     const main2 = agentId === null;
@@ -41908,8 +42111,9 @@ var Sim = class {
   }
   /** Push the main context near the limit, for the compaction step. */
   async inflateContext(target) {
+    const stride = Math.max(18e3, Math.round((target - this.context) / 8));
     while (this.context < target) {
-      this.context = Math.min(target, this.context + rnd(18e3, 3e4));
+      this.context = Math.min(target, this.context + stride + rnd(0, stride / 4));
       await this.events([
         {
           kind: "usage",
@@ -42025,7 +42229,7 @@ var TEXT = {
     title: "D\xE9mo guid\xE9e \u2014 refonte du paiement",
     steps: [
       ["Une nouvelle session d\xE9marre", "Claude Code d\xE9marre dans le projet \xAB boutique-en-ligne \xBB. La base creuse la salle principale et sa mascotte s\u2019installe (une taupe, ou Clawd en option)."],
-      ["Le prompt de l\u2019utilisateur", "L\u2019utilisateur demande une refonte du paiement. Le prompt s\u2019affiche sur le tableau et la jauge de contexte commence \xE0 se remplir."],
+      ["Le prompt de l\u2019utilisateur", "L\u2019utilisateur demande une refonte du paiement, puis ajoute une pr\xE9cision pendant que Claude travaille : elle attend en file (\u23F3) et lui est remise en cours de route."],
       ["Claude planifie", "Claude \xE9crit sa todo-list : la t\xE2che en cours s\u2019affiche sur le tableau (\u2610 0/5). Cliquez sur une salle pour voir la liste compl\xE8te."],
       ["Lecture du code", "Pour lire, la mascotte va \xE0 l\u2019\xE9tag\xE8re, un parchemin \xE0 la main. Chaque fichier lu s\u2019affiche en bleu (R) sur le tableau."],
       ["Premi\xE8re modification", "Pour \xE9diter, elle tape au bureau et les lignes ajout\xE9es ou supprim\xE9es s\u2019envolent. Le diff exact est dans la vue Fichiers."],
@@ -42046,6 +42250,8 @@ var TEXT = {
     end: ["Fin de la d\xE9mo", "Merci d\u2019avoir suivi la visite ! D\u2019ici une minute, les agents termin\xE9s quitteront la base un par un (le bouton \xAB Archiv\xE9s \xBB les r\xE9affiche). Relancez avec \u25B6 D\xE9mo."],
     stopped: ["D\xE9mo arr\xEAt\xE9e", "La visite est interrompue. Relancez-la quand vous voulez avec \u25B6 D\xE9mo."],
     prompt: "Refactorise le module de paiement, ajoute des tests et audite la s\xE9curit\xE9 du checkout.",
+    followUp: "Pense aussi aux remboursements partiels.",
+    replies: ["Je commence par lire le module de paiement, puis je corrige les arrondis (remboursements partiels compris).", "Les tests passent. Je confie l\u2019exploration \xE0 trois agents en parall\xE8le."],
     plan: ["Lire le module de paiement", "Corriger les arrondis", "Explorer et tester en parall\xE8le", "Auditer la s\xE9curit\xE9", "R\xE9diger le bilan"],
     task: "Refonte du paiement",
     permission: "Claude a besoin de votre permission pour utiliser Bash",
@@ -42080,7 +42286,7 @@ var TEXT = {
     title: "Guided demo \u2014 payment refactor",
     steps: [
       ["A new session starts", "Claude Code starts in the \u201Conline-shop\u201D project. The base digs the main room and its mascot moves in (a mole, or Clawd optionally)."],
-      ["The user\u2019s prompt", "The user asks for a payment refactor. The prompt shows on the board and the context gauge starts filling up."],
+      ["The user\u2019s prompt", "The user asks for a payment refactor, then adds a detail while Claude works: it waits in the queue (\u23F3) and is handed over mid-turn."],
       ["Claude plans", "Claude writes its todo list: the current task shows on the board (\u2610 0/5). Click a room to see the full list."],
       ["Reading code", "To read, the mascot walks to the bookshelf with a scroll. Every file read shows in blue (R) on the board."],
       ["First edit", "To edit, it types at the desk and the added or removed lines fly away. The exact diff is in the Files view."],
@@ -42101,6 +42307,8 @@ var TEXT = {
     end: ["End of the demo", "Thanks for taking the tour! Within a minute, finished agents will leave the base one by one (the \u201CArchived\u201D button shows them again). Replay with \u25B6 Demo."],
     stopped: ["Demo stopped", "The tour was interrupted. Replay it any time with \u25B6 Demo."],
     prompt: "Refactor the payment module, add tests and audit the checkout security.",
+    followUp: "Also handle partial refunds.",
+    replies: ["I will read the payment module first, then fix the rounding (partial refunds included).", "Tests pass. I am handing the exploration to three agents in parallel."],
     plan: ["Read the payment module", "Fix rounding errors", "Explore and test in parallel", "Audit security", "Write the summary"],
     task: "Payment refactor",
     permission: "Claude needs your permission to use Bash",
@@ -42173,8 +42381,13 @@ async function tour(s, L) {
     await s.hook("UserPromptSubmit", null, { prompt: L.prompt, prompt_id: randomUUID(), source: "user" });
     await s.sleep(1200);
     await s.usage(null, opus);
+    await s.queue("enqueue", L.followUp);
+    await s.sleep(2600);
+    await s.queue("remove", L.followUp);
+    await s.inject(L.followUp);
   });
   await step(3, main2, async () => {
+    await s.reply(null, L.replies[0]);
     await s.todos(null, plan);
     await s.hook("TaskCreated", null, { task_id: "demo-task", task_subject: L.task });
   });
@@ -42206,6 +42419,7 @@ async function tour(s, L) {
     mark(1, "completed");
     mark(2, "in_progress");
     await s.todos(null, plan);
+    await s.reply(null, L.replies[1]);
   });
   let explorers = [];
   await step(
@@ -42258,7 +42472,7 @@ async function tour(s, L) {
     300
   );
   await step(14, main2, async () => {
-    await s.inflateContext(185e3);
+    await s.inflateContext(94e4);
     await s.sleep(1500);
     await s.hook("PostCompact", null, { trigger: "auto" });
     s.resetContext(32e3);

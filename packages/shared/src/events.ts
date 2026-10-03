@@ -61,6 +61,12 @@ export type NormalizedEvent =
     })
   | (Base & { kind: 'usage'; agentId: string; messageId: string; model: string | null; usage: TokenUsage })
   | (Base & { kind: 'assistant.text'; agentId: string; text: string })
+  /** Claude Code's prompt queue (messages typed while Claude works). */
+  | (Base & { kind: 'message.queue'; agentId: string; op: 'enqueue' | 'dequeue' | 'remove'; text: string | null })
+  /** A queued message handed to Claude inside the running turn. */
+  | (Base & { kind: 'message.inject'; agentId: string; text: string })
+  /** Authoritative context window for an agent (model identity, /context). */
+  | (Base & { kind: 'context.window'; agentId: string; window: number })
   | (Base & { kind: 'turn.end'; agentId: string; lastMessage?: string | null })
   | (Base & { kind: 'file.change'; change: FileChange })
   | (Base & { kind: 'notification'; message: string; notificationType: string | null })

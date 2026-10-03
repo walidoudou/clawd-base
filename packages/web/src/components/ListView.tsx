@@ -37,7 +37,7 @@ function AgentCard({ a }: { a: Agent }) {
       </ul>
       {a.contextTokens > 0 && (
         <div className="card-ctx" title={`${t.context} ${a.contextTokens.toLocaleString(intlLocale)}`}>
-          <span style={{ width: `${Math.min(100, (a.contextTokens / (data.sessions.get(a.sessionId)?.contextWindow ?? 200_000)) * 100)}%` }} />
+          <span style={{ width: `${Math.min(100, (a.contextTokens / (a.contextWindow || (data.sessions.get(a.sessionId)?.contextWindow ?? 200_000))) * 100)}%` }} />
         </div>
       )}
       <div className="card-bottom">

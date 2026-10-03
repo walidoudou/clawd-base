@@ -309,3 +309,18 @@ a { color: var(--accent); }
 .game-controls button:disabled { opacity: 0.45; cursor: default; }
 .jl-kind { flex: none; color: #8a7fa0; font-size: 10.5px; min-width: 72px; }
 .lang-button { background: var(--panel); border: 2px solid var(--line); padding: 1px 6px; cursor: pointer; font-size: 11px; font-weight: 700; }
+
+/* Live conversation in the agent panel */
+.convo { list-style: none; margin: 0; padding: 0; max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; border: 2px solid var(--line); background: #0f0d13; padding: 8px; }
+.convo-msg { border-left: 3px solid var(--line); padding: 4px 8px; background: var(--panel2); }
+.convo-user { border-left-color: #d8cfe6; }
+.convo-assistant { border-left-color: #a8e6cf; }
+.convo-task { border-left-color: #b5e48c; }
+.convo-queued { border-left-color: var(--accent2); opacity: 0.9; }
+.convo-removed { opacity: 0.55; }
+.convo-meta { font-size: 11px; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.convo-text { white-space: pre-wrap; word-break: break-word; font-size: 12.5px; line-height: 1.45; margin-top: 2px; max-height: 14em; overflow: hidden; }
+.convo-badge { font-size: 10px; padding: 0 5px; border: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.5px; }
+.convo-badge-queued { color: var(--accent2); border-color: var(--accent2); animation: blink-border 1.2s steps(2) infinite; }
+.convo-badge-delivered { color: #a8e6cf; border-color: #4a7a6a; }
+.convo-badge-removed { color: var(--muted); }

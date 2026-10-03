@@ -38,6 +38,23 @@ export interface FileChange {
   diffSource: 'structuredPatch' | 'snapshot' | 'strings' | 'none';
 }
 
+/** A message of the conversation, shown live: sent, received, queued while Claude works, task done. */
+export interface Message {
+  id: string;
+  sessionId: string;
+  agentId: string;
+  at: number;
+  /** user = typed by the user (or the prompt of a sub-agent), assistant = Claude's reply, task = a task/todo done. */
+  role: 'user' | 'assistant' | 'task';
+  text: string;
+  /**
+   * sent: a normal prompt; queued: typed while Claude was busy, waiting; delivered: a queued message
+   * Claude received (midTurn: inside the running turn); removed: taken out of the queue unanswered.
+   */
+  state: 'sent' | 'queued' | 'delivered' | 'removed';
+  midTurn: boolean;
+}
+
 export interface ToolEvent {
   /** tool_use_id */
   id: string;
@@ -128,6 +145,8 @@ export interface Agent {
    */
   contextTokens: number;
   contextAt: number;
+  /** Context window of this agent's model (1M for Opus 4.7+, Sonnet 5+, Fable; 200k otherwise). */
+  contextWindow: number;
   /** Times the conversation was compacted. */
   compactions: number;
   /** Latest TodoWrite list. */

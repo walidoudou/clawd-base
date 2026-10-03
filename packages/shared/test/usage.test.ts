@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UsageLedger, formatTokens, makeUsage, usageFromApi } from '../src/usage.ts';
+import { UsageLedger, contextWindowFor, formatTokens, makeUsage, usageFromApi } from '../src/usage.ts';
 import { StateStore } from '../src/store.ts';
 import { TranscriptParser } from '../src/transcript.ts';
 import { SID, assistantLines, text, thinking, toolUse } from './fixtures.ts';
@@ -55,5 +55,12 @@ describe('formatTokens', () => {
     expect(formatTokens(1234)).toBe('1.2k');
     expect(formatTokens(45678)).toBe('46k');
     expect(formatTokens(6190573)).toBe('6.19M');
+  });
+});
+
+describe('contextWindowFor (Claude Code model catalog)', () => {
+  it('1M for Opus 4.7+, Sonnet 5+, Fable and [1m] models; 200k otherwise', () => {
+    for (const m of ['claude-opus-5-5', 'claude-opus-4-7', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-sonnet-4-6[1m]', 'Opus 4.6 (1M context)']) expect(contextWindowFor(m)).toBe(1_000_000);
+    for (const m of ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-sonnet-4-20250514', 'claude-opus-4-5-20251101', 'claude-haiku-4-5-20251001', null, 'opus']) expect(contextWindowFor(m)).toBe(200_000);
   });
 });

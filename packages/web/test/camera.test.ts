@@ -36,6 +36,7 @@ function agent(p: Partial<Agent> & { id: string }): Agent {
     turns: 0,
     contextTokens: 0,
     contextAt: 0,
+    contextWindow: 200_000,
     compactions: 0,
     todos: [],
     liveText: null,
