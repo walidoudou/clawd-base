@@ -7,7 +7,7 @@
  * transport) and by `npm run simulate` (HTTP transport).
  */
 import { randomUUID } from 'node:crypto';
-import { makeUsage, type Narration, type NormalizedEvent } from '@dash/shared';
+import { makeUsage, type FocusTarget, type Narration, type NarrationFocus, type NormalizedEvent } from '@dash/shared';
 
 export interface DemoTransport {
   hook(payload: Record<string, unknown>): Promise<void>;
@@ -46,6 +46,8 @@ export class Sim {
   private msg = 0;
   /** Main thread context, grows with the session (for the gauge and the compaction). */
   private context = 18_000;
+  /** Demo time slept so far (ms, unaffected by speed and pauses): paces the narration. */
+  private demoTime = 0;
 
   constructor(
     private readonly t: DemoTransport,
@@ -63,9 +65,17 @@ export class Sim {
       if (this.ctl.aborted) throw new DemoAborted();
       const step = Math.min(100, left);
       await new Promise((r) => setTimeout(r, step / Math.max(0.1, this.ctl.speed)));
-      if (!this.ctl.paused) left -= step;
+      if (!this.ctl.paused) {
+        left -= step;
+        this.demoTime += step;
+      }
     }
     if (this.ctl.aborted) throw new DemoAborted();
+  }
+
+  /** Demo time elapsed (ms), the clock the narration is paced on. */
+  get clock(): number {
+    return this.demoTime;
   }
 
   private base(agentId: string | null, agentType = 'sim') {
@@ -244,26 +254,27 @@ const TEXT = {
     cwd: '/home/dev/projets/boutique-en-ligne',
     title: 'Démo guidée — refonte du paiement',
     steps: [
-      ['Une nouvelle session démarre', 'Claude Code vient d’être lancé dans le projet « boutique-en-ligne ». La base creuse la salle de la session principale et sa mascotte s’installe (une taupe mineuse par défaut, Clawd en option).'],
-      ['Le prompt de l’utilisateur', 'L’utilisateur demande une refonte du module de paiement. Le prompt s’affiche sur le tableau, la mascotte se met au travail et la jauge de contexte se remplit.'],
-      ['Claude planifie', 'Claude écrit sa todo-list. La tâche en cours apparaît sur le tableau (☐ 0/5), la liste complète est dans le panneau de l’agent : cliquez sur la salle pour l’ouvrir.'],
-      ['Lecture du code', 'Pour lire, la mascotte va à l’étagère avec un parchemin. Chaque fichier lu apparaît en bleu (R) sur le tableau.'],
-      ['Première modification', 'Pour éditer, elle passe au bureau : elle tape au clavier et les lignes ajoutées ou supprimées s’envolent. Le diff exact, avec ses numéros de ligne, est dans l’onglet Fichiers.'],
-      ['Les tests échouent', 'La mascotte lance les tests au terminal… qui échouent. La salle tremble, des étincelles jaillissent et une notification d’erreur apparaît : rien n’est caché.'],
-      ['Claude demande la permission', 'Claude veut exécuter une commande sensible et attend votre accord : point d’interrogation au-dessus de la mascotte, lampe ambre et ⚠ dans le titre de l’onglet.'],
-      ['Correction et succès', 'Accord donné : la mascotte corrige l’arrondi, relance les tests, qui passent, et la todo-list avance.'],
-      ['Trois agents en parallèle', 'Claude délègue : trois sous-agents Explore sont lancés dans le même message. Chaque salle est creusée en direct et chaque mascotte est unique, générée à partir de l’identifiant de l’agent.'],
-      ['Les explorateurs travaillent', 'Ils lisent en parallèle, l’ascenseur suit l’étage actif. Quand un agent termine, il célèbre sous les confettis puis s’endort : sa salle s’éteint et se compacte.'],
-      ['Étape 2 : un workflow apparaît', 'Un deuxième lot d’agents dans le même tour, et c’est désormais un workflow. La salle du chef (couronne ou toque) est construite, et des câbles s’illuminent vers l’étape active.'],
+      ['Une nouvelle session démarre', 'Claude Code démarre dans le projet « boutique-en-ligne ». La base creuse la salle principale et sa mascotte s’installe (une taupe, ou Clawd en option).'],
+      ['Le prompt de l’utilisateur', 'L’utilisateur demande une refonte du paiement. Le prompt s’affiche sur le tableau et la jauge de contexte commence à se remplir.'],
+      ['Claude planifie', 'Claude écrit sa todo-list : la tâche en cours s’affiche sur le tableau (☐ 0/5). Cliquez sur une salle pour voir la liste complète.'],
+      ['Lecture du code', 'Pour lire, la mascotte va à l’étagère, un parchemin à la main. Chaque fichier lu s’affiche en bleu (R) sur le tableau.'],
+      ['Première modification', 'Pour éditer, elle tape au bureau et les lignes ajoutées ou supprimées s’envolent. Le diff exact est dans la vue Fichiers.'],
+      ['Les tests échouent', 'Elle lance les tests au terminal… échec ! La salle tremble, des étincelles jaillissent et une notification d’erreur apparaît.'],
+      ['Claude demande la permission', 'Claude attend votre accord pour lancer une commande : point d’interrogation au-dessus de la mascotte, lampe ambre et ⚠ dans l’onglet.'],
+      ['Correction et succès', 'Accord donné : la mascotte corrige l’arrondi et relance les tests, qui passent cette fois. La todo-list avance.'],
+      ['Trois agents en parallèle', 'Claude délègue à trois sous-agents Explore. Leurs salles sont creusées en direct ; chaque mascotte est unique, tirée de l’identifiant de l’agent.'],
+      ['Les explorateurs travaillent', 'Ils lisent en parallèle. Un agent qui a fini fait la fête sous les confettis, puis s’endort : sa salle s’éteint et rétrécit.'],
+      ['Étape 2 : un workflow apparaît', 'Un deuxième lot d’agents dans le même tour forme un workflow : la salle du chef apparaît et ses câbles s’allument vers l’étape en cours.'],
       ['Un agent délègue à son tour', 'Un sous-agent peut lancer ses propres agents : un câble violet en pointillés relie le parent à l’enfant.'],
-      ['Étape 3 : relecture', 'Dernière étape : un agent Plan relit l’ensemble. Sur son tableau, le chef suit la progression des étapes (■ terminée, ▶ en cours).'],
-      ['Le contexte se compacte', 'La jauge de contexte approche de la limite. Claude compacte la conversation : un tourbillon aspire les vieux messages et la jauge redescend.'],
-      ['Un agent plante', 'Un agent chargé de la migration rencontre une erreur fatale : salle secouée, alarme rouge, notification. Il reste visible pour l’analyse.'],
-      ['Workflow explicite', 'Avec la convention [workflow:nom step:n], on regroupe explicitement des agents. Voici l’audit de sécurité en deux étapes : quatre audits en parallèle, puis correctifs et rapport.'],
-      ['Réponse en streaming', 'Avec le streaming activé (CLAWD_BASE_STREAM=1), la réponse s’écrit en direct dans une bulle au-dessus de la mascotte et dans son panneau.'],
-      ['Fin de session', 'Session terminée : feu d’artifice au-dessus de la base ! Explorez maintenant la Chronologie (touche 3) et les Fichiers (touche 4) pour revoir tout ce qui s’est passé.'],
+      ['Étape 3 : relecture', 'Dernière étape : un agent Plan relit le tout. Sur son tableau, le chef suit les étapes (■ terminée, ▶ en cours).'],
+      ['Le contexte se compacte', 'La jauge de contexte approche de la limite : Claude compacte la conversation, un tourbillon passe et la jauge redescend.'],
+      ['Un agent plante', 'L’agent chargé de la migration rencontre une erreur fatale : salle secouée, alarme rouge, notification. Il reste visible pour l’analyse.'],
+      ['Workflow explicite', 'Le marqueur [workflow:nom step:n] regroupe des agents à la main. Ici, un audit en deux étapes : quatre audits en parallèle, puis correctifs et rapport.'],
+      ['Réponse en streaming', 'Avec CLAWD_BASE_STREAM=1, la réponse s’écrit en direct dans une bulle au-dessus de la mascotte et dans son panneau.'],
+      ['Fin de session', 'Session terminée : feu d’artifice ! Revoyez tout dans la Chronologie (touche 3) et les Fichiers (touche 4).'],
     ],
-    end: ['Fin de la démo', 'Merci d’avoir suivi la visite ! Dans une minute, les agents terminés quitteront la base un par un (la mascotte sort, la salle est rebouchée) ; le bouton « Archivés » les réaffiche. Relancez la visite avec ▶ Démo.'],
+    end: ['Fin de la démo', 'Merci d’avoir suivi la visite ! D’ici une minute, les agents terminés quitteront la base un par un (le bouton « Archivés » les réaffiche). Relancez avec ▶ Démo.'],
+    stopped: ['Démo arrêtée', 'La visite est interrompue. Relancez-la quand vous voulez avec ▶ Démo.'],
     prompt: 'Refactorise le module de paiement, ajoute des tests et audite la sécurité du checkout.',
     plan: ['Lire le module de paiement', 'Corriger les arrondis', 'Explorer et tester en parallèle', 'Auditer la sécurité', 'Rédiger le bilan'],
     task: 'Refonte du paiement',
@@ -298,26 +309,27 @@ const TEXT = {
     cwd: '/home/dev/projects/online-shop',
     title: 'Guided demo — payment refactor',
     steps: [
-      ['A new session starts', 'Claude Code was just launched in the “online-shop” project. The base digs the main session’s room and its mascot moves in (a miner mole by default, Clawd optionally).'],
-      ['The user’s prompt', 'The user asks for a payment module refactor. The prompt shows on the board, the mascot gets to work and the context gauge fills up.'],
-      ['Claude plans', 'Claude writes its todo list. The current task shows on the board (☐ 0/5); the full list is in the agent panel: click the room to open it.'],
+      ['A new session starts', 'Claude Code starts in the “online-shop” project. The base digs the main room and its mascot moves in (a mole, or Clawd optionally).'],
+      ['The user’s prompt', 'The user asks for a payment refactor. The prompt shows on the board and the context gauge starts filling up.'],
+      ['Claude plans', 'Claude writes its todo list: the current task shows on the board (☐ 0/5). Click a room to see the full list.'],
       ['Reading code', 'To read, the mascot walks to the bookshelf with a scroll. Every file read shows in blue (R) on the board.'],
-      ['First edit', 'To edit, it goes to the desk: it types and the added/removed lines fly away. The exact diff, with line numbers, is in the Files view.'],
-      ['Tests fail', 'The mascot runs the tests at the terminal… and they fail. The room shakes, sparks fly and an error toast pops up: nothing is hidden.'],
-      ['Claude asks for permission', 'Claude wants to run a sensitive command and waits for your approval: a question mark above the mascot, an amber lamp and ⚠ in the tab title.'],
-      ['Fix and success', 'Approved: the mascot fixes the rounding, re-runs the tests, which pass, and the todo list moves on.'],
-      ['Three agents in parallel', 'Claude delegates: three Explore sub-agents are launched in the same message. Each room is dug live and every mascot is unique, generated from the agent id.'],
-      ['The explorers at work', 'They read in parallel; the elevator follows the active level. When an agent finishes it celebrates under confetti, then falls asleep: its room dims and compacts.'],
-      ['Step 2: a workflow appears', 'A second batch of agents in the same turn makes it a workflow. The chief’s room (crown or chef hat) is built and cables light up towards the active step.'],
+      ['First edit', 'To edit, it types at the desk and the added or removed lines fly away. The exact diff is in the Files view.'],
+      ['Tests fail', 'It runs the tests at the terminal… failure! The room shakes, sparks fly and an error toast pops up.'],
+      ['Claude asks for permission', 'Claude waits for your approval to run a command: a question mark above the mascot, an amber lamp and ⚠ in the tab title.'],
+      ['Fix and success', 'Approved: the mascot fixes the rounding and re-runs the tests, which pass this time. The todo list moves on.'],
+      ['Three agents in parallel', 'Claude delegates to three Explore sub-agents. Their rooms are dug live; every mascot is unique, generated from the agent id.'],
+      ['The explorers at work', 'They read in parallel. An agent that finishes celebrates under confetti, then falls asleep: its room dims and shrinks.'],
+      ['Step 2: a workflow appears', 'A second batch of agents in the same turn makes a workflow: the chief’s room appears and its cables light up towards the running step.'],
       ['An agent delegates too', 'A sub-agent can launch its own agents: a purple dotted cable links the parent to the child.'],
       ['Step 3: review', 'Last step: a Plan agent reviews everything. On its board, the chief tracks the steps (■ done, ▶ running).'],
-      ['Context compaction', 'The context gauge nears the limit. Claude compacts the conversation: a whirlwind sucks old messages away and the gauge drops.'],
-      ['An agent crashes', 'An agent running a migration hits a fatal error: shaking room, red alarm, toast. It stays visible for analysis.'],
-      ['Explicit workflow', 'With the [workflow:name step:n] convention you group agents explicitly. Here is a two-step security audit: four parallel audits, then fixes and a report.'],
-      ['Streaming answer', 'With streaming enabled (CLAWD_BASE_STREAM=1), the answer is written live in a bubble above the mascot and in its panel.'],
-      ['Session over', 'Session ended: fireworks above the base! Now explore the Timeline (key 3) and Files (key 4) to replay everything that happened.'],
+      ['Context compaction', 'The context gauge nears the limit: Claude compacts the conversation, a whirlwind passes and the gauge drops.'],
+      ['An agent crashes', 'The agent running the migration hits a fatal error: shaking room, red alarm, toast. It stays visible for analysis.'],
+      ['Explicit workflow', 'The [workflow:name step:n] marker groups agents by hand. Here, a two-step audit: four parallel audits, then fixes and a report.'],
+      ['Streaming answer', 'With CLAWD_BASE_STREAM=1, the answer is written live in a bubble above the mascot and in its panel.'],
+      ['Session over', 'Session ended: fireworks! Replay everything in the Timeline (key 3) and Files (key 4) views.'],
     ],
-    end: ['End of the demo', 'Thanks for taking the tour! In a minute, finished agents will leave the base one by one (the mascot walks out, the room is filled in); the “Archived” button shows them again. Replay with ▶ Demo.'],
+    end: ['End of the demo', 'Thanks for taking the tour! Within a minute, finished agents will leave the base one by one (the “Archived” button shows them again). Replay with ▶ Demo.'],
+    stopped: ['Demo stopped', 'The tour was interrupted. Replay it any time with ▶ Demo.'],
     prompt: 'Refactor the payment module, add tests and audit the checkout security.',
     plan: ['Read the payment module', 'Fix rounding errors', 'Explore and test in parallel', 'Audit security', 'Write the summary'],
     task: 'Payment refactor',
@@ -350,164 +362,210 @@ const TEXT = {
   },
 } as const;
 
-/** The full guided tour, A to Z (≈ 3 minutes at speed 1). */
+/** Before a step's actions: the camera travels and the reader starts the caption. */
+const LEAD_MS = 1100;
+
+/** How long a caption stays up at least: typed at ~55 chars/s, read at ~20 chars/s. */
+export function readingTime(text: string): number {
+  return 1500 + text.length * 50;
+}
+
+/** The full guided tour, A to Z (≈ 4 minutes at speed 1). */
 export async function runGuidedDemo(t: DemoTransport, ctl: DemoControl, onSession?: (sessionId: string) => void, locale: DemoLocale = 'fr'): Promise<string> {
   const L = TEXT[locale] ?? TEXT.fr;
   const s = new Sim(t, ctl, 'sim-demo', L.cwd, { done: L.workDone, failed: L.workFailed });
   onSession?.(s.sessionId);
+  try {
+    await tour(s, L);
+  } catch (e) {
+    // Stopped mid-way: close the caption instead of leaving a frozen step on screen.
+    if (e instanceof DemoAborted) await s.narrate(0, DEMO_STEPS, L.stopped[0], L.stopped[1], null, true).catch(() => {});
+    throw e;
+  }
+  return s.sessionId;
+}
+
+async function tour(s: Sim, L: (typeof TEXT)[DemoLocale]): Promise<void> {
   const N = DEMO_STEPS;
   const { opus, sonnet, haiku } = MODELS;
-  const pause = (ms = 2500) => s.sleep(ms);
-  const say = (step: number, focus: Narration['focus']) => {
-    const [title, text] = L.steps[step - 1] as readonly [string, string];
-    return s.narrate(step, N, title, text, focus);
-  };
+  const group = (...targets: FocusTarget[]): NarrationFocus => ({ kind: 'group', targets });
+  const main: NarrationFocus = { kind: 'main' };
   const plan: Plan = L.plan.map((p, i) => [p, i === 0 ? 'in_progress' : 'pending']);
   const mark = (i: number, st: 'in_progress' | 'completed') => {
     plan[i] = [L.plan[i] as string, st];
   };
+  /**
+   * One step: caption and camera first, a lead-in so the camera arrives before anything
+   * happens, the actions, then enough time to finish reading before the next caption.
+   * Steps that frame rooms about to be spawned use a short lead so the camera moves once.
+   */
+  const step = async (n: number, focus: NarrationFocus, body: () => Promise<void>, lead = LEAD_MS) => {
+    const [title, text] = L.steps[n - 1] as readonly [string, string];
+    const start = s.clock;
+    await s.narrate(n, N, title, text, focus);
+    await s.sleep(lead);
+    await body();
+    await s.sleep(Math.max(1200, readingTime(text) - (s.clock - start)));
+  };
 
-  // 1 — session
-  await say(1, { kind: 'main' });
-  await s.hook('SessionStart', null, { source: 'startup', model: opus });
-  await s.events([{ kind: 'session.title', sessionId: s.sessionId, at: Date.now(), source: 'sim', title: L.title, priority: 3 }]);
-  await pause(5000);
+  await step(1, main, async () => {
+    await s.hook('SessionStart', null, { source: 'startup', model: opus });
+    await s.events([{ kind: 'session.title', sessionId: s.sessionId, at: Date.now(), source: 'sim', title: L.title, priority: 3 }]);
+  });
 
-  // 2 — prompt
-  await say(2, { kind: 'main' });
-  await s.hook('UserPromptSubmit', null, { prompt: L.prompt, prompt_id: randomUUID(), source: 'user' });
-  await s.sleep(1200);
-  await s.usage(null, opus);
-  await pause(3500);
+  await step(2, main, async () => {
+    await s.hook('UserPromptSubmit', null, { prompt: L.prompt, prompt_id: randomUUID(), source: 'user' });
+    await s.sleep(1200);
+    await s.usage(null, opus);
+  });
 
-  // 3 — todo list
-  await say(3, { kind: 'main' });
-  await s.todos(null, plan);
-  await s.hook('TaskCreated', null, { task_id: 'demo-task', task_subject: L.task });
-  await pause(4500);
+  await step(3, main, async () => {
+    await s.todos(null, plan);
+    await s.hook('TaskCreated', null, { task_id: 'demo-task', task_subject: L.task });
+  });
 
-  // 4 — reading
-  await say(4, { kind: 'main' });
-  await s.read(null, 'src/payment/stripe.ts');
-  await s.usage(null, opus);
-  await s.read(null, 'src/lib/money.ts');
-  await s.toolCall(null, 'Grep', { pattern: 'chargeCard', path: L.cwd }, { ms: 1500 });
-  await s.usage(null, opus);
-  await pause(1500);
+  await step(4, main, async () => {
+    await s.read(null, 'src/payment/stripe.ts');
+    await s.usage(null, opus);
+    await s.read(null, 'src/lib/money.ts');
+    await s.toolCall(null, 'Grep', { pattern: 'chargeCard', path: L.cwd }, { ms: 1500 });
+    await s.usage(null, opus);
+  });
 
-  // 5 — editing
-  await say(5, { kind: 'main' });
-  mark(0, 'completed');
-  mark(1, 'in_progress');
-  await s.todos(null, plan);
-  await s.edit(null, 'src/payment/stripe.ts', 'big');
-  await s.usage(null, opus);
-  await pause(2500);
+  await step(5, main, async () => {
+    mark(0, 'completed');
+    mark(1, 'in_progress');
+    await s.todos(null, plan);
+    await s.edit(null, 'src/payment/stripe.ts', 'big');
+    await s.usage(null, opus);
+  });
 
-  // 6 — failing tests
-  await say(6, { kind: 'main' });
-  await s.bash(null, 'npm test -- payment', 'FAIL tests/payment.test.ts — expected 1999 to be 2000');
-  await s.usage(null, opus);
-  await pause(4000);
+  await step(6, main, async () => {
+    await s.bash(null, 'npm test -- payment', 'FAIL tests/payment.test.ts — expected 1999 to be 2000');
+    await s.usage(null, opus);
+  });
 
-  // 7 — permission
-  await say(7, { kind: 'main' });
-  await s.hook('Notification', null, { notification_type: 'permission_prompt', message: L.permission });
-  await pause(6500);
+  await step(7, main, async () => {
+    await s.hook('Notification', null, { notification_type: 'permission_prompt', message: L.permission });
+  });
 
-  // 8 — fix and success
-  await say(8, { kind: 'main' });
-  await s.edit(null, 'src/lib/money.ts');
-  await s.bash(null, 'npm test -- payment');
-  await s.usage(null, opus);
-  mark(1, 'completed');
-  mark(2, 'in_progress');
-  await s.todos(null, plan);
-  await pause(2500);
+  await step(8, main, async () => {
+    await s.edit(null, 'src/lib/money.ts');
+    await s.bash(null, 'npm test -- payment');
+    await s.usage(null, opus);
+    mark(1, 'completed');
+    mark(2, 'in_progress');
+    await s.todos(null, plan);
+  });
 
-  // 9 — three parallel agents
-  await say(9, { kind: 'overview' });
-  const step1 = await Promise.all(L.explorers.map(([d, p]) => s.spawn(null, 'Explore', d, p, haiku)));
-  await pause(3000);
+  // Three explorers dug next to the main room: the camera moves to them as they appear.
+  let explorers: Array<{ agentId: string; toolUseId: string }> = [];
+  await step(
+    9,
+    group({ kind: 'spawned' }),
+    async () => {
+      explorers = await Promise.all(L.explorers.map(([d, p]) => s.spawn(null, 'Explore', d, p, haiku)));
+      await s.sleep(1500);
+    },
+    300,
+  );
 
-  // 10 — explorers work and finish
-  await say(10, { kind: 'overview' });
-  await Promise.all(step1.map((a, i) => s.work(a.agentId, haiku, { reads: 2 + i, done: L.reportDone })));
-  await s.usage(null, opus);
-  await pause(3000);
+  await step(10, group(...explorers.map((a): FocusTarget => ({ kind: 'agent', toolUseId: a.toolUseId }))), async () => {
+    await Promise.all(explorers.map((a, i) => s.work(a.agentId, haiku, { reads: 2 + i, done: L.reportDone })));
+    await s.usage(null, opus);
+  });
 
-  // 11 — second step → workflow
-  await say(11, { kind: 'workflow', index: 0 });
-  const step2 = await Promise.all(L.implementers.map(([d, p]) => s.spawn(null, 'general-purpose', d, p, sonnet)));
-  await pause(2500);
+  // The second batch turns them into a workflow: frame the chief and the new step.
+  let implementers: Array<{ agentId: string; toolUseId: string }> = [];
+  await step(
+    11,
+    group({ kind: 'workflow', index: 0 }, { kind: 'step', index: 0, step: 2 }),
+    async () => {
+      implementers = await Promise.all(L.implementers.map(([d, p]) => s.spawn(null, 'general-purpose', d, p, sonnet)));
+      await s.sleep(1500);
+    },
+    300,
+  );
 
-  // 12 — nested agent
-  await say(12, { kind: 'agent', toolUseId: step2[0]?.toolUseId ?? '' });
-  const nested = await s.spawn(step2[0]?.agentId ?? null, 'Explore', L.nested[0], L.nested[1], haiku);
-  await Promise.all([
-    s.work(step2[0]?.agentId ?? '', sonnet, { reads: 2, edits: 3, bash: 1 }),
-    s.work(step2[1]?.agentId ?? '', sonnet, { reads: 1, writes: 2, bash: 1 }),
-    s.work(nested.agentId, haiku, { reads: 2 }),
-  ]);
-  await pause(1500);
+  const parent = implementers[0] as { agentId: string; toolUseId: string };
+  await step(
+    12,
+    group({ kind: 'agent', toolUseId: parent.toolUseId }, { kind: 'spawned' }),
+    async () => {
+      const nested = await s.spawn(parent.agentId, 'Explore', L.nested[0], L.nested[1], haiku);
+      await Promise.all([
+        s.work(parent.agentId, sonnet, { reads: 2, edits: 3, bash: 1 }),
+        s.work(implementers[1]?.agentId ?? '', sonnet, { reads: 1, writes: 2, bash: 1 }),
+        s.work(nested.agentId, haiku, { reads: 2 }),
+      ]);
+    },
+    300,
+  );
 
-  // 13 — third step
-  await say(13, { kind: 'workflow', index: 0 });
-  const step3 = await s.spawn(null, 'Plan', L.reviewer[0], L.reviewer[1], opus);
-  await s.work(step3.agentId, opus, { reads: 3, edits: 1, done: L.reviewDone });
-  mark(2, 'completed');
-  mark(3, 'in_progress');
-  await s.todos(null, plan);
-  await pause(3000);
+  await step(
+    13,
+    group({ kind: 'workflow', index: 0 }, { kind: 'spawned' }),
+    async () => {
+      const reviewer = await s.spawn(null, 'Plan', L.reviewer[0], L.reviewer[1], opus);
+      await s.work(reviewer.agentId, opus, { reads: 3, edits: 1, done: L.reviewDone });
+      mark(2, 'completed');
+      mark(3, 'in_progress');
+      await s.todos(null, plan);
+    },
+    300,
+  );
 
-  // 14 — compaction
-  await say(14, { kind: 'main' });
-  await s.inflateContext(185_000);
-  await s.sleep(1500);
-  await s.hook('PostCompact', null, { trigger: 'auto' });
-  s.resetContext(32_000);
-  await s.usage(null, opus);
-  await pause(3500);
+  await step(14, main, async () => {
+    await s.inflateContext(185_000);
+    await s.sleep(1500);
+    await s.hook('PostCompact', null, { trigger: 'auto' });
+    s.resetContext(32_000);
+    await s.usage(null, opus);
+  });
 
-  // 15 — crash
-  await say(15, { kind: 'overview' });
-  await s.hook('UserPromptSubmit', null, { prompt: L.migratePrompt, prompt_id: randomUUID(), source: 'user' });
-  const crash = await s.spawn(null, 'general-purpose', L.migrate[0], L.migrate[1], sonnet);
-  await s.work(crash.agentId, sonnet, { reads: 1, fail: 'Error: relation "orders" does not exist' });
-  await pause(4000);
+  await step(
+    15,
+    group({ kind: 'main' }, { kind: 'spawned' }),
+    async () => {
+      await s.hook('UserPromptSubmit', null, { prompt: L.migratePrompt, prompt_id: randomUUID(), source: 'user' });
+      const crash = await s.spawn(null, 'general-purpose', L.migrate[0], L.migrate[1], sonnet);
+      await s.work(crash.agentId, sonnet, { reads: 1, fail: 'Error: relation "orders" does not exist' });
+      await s.sleep(1500);
+    },
+    300,
+  );
 
-  // 16 — explicit workflow
-  await say(16, { kind: 'workflow', index: 1 });
-  await s.hook('UserPromptSubmit', null, { prompt: L.auditPrompt, prompt_id: randomUUID(), source: 'user' });
-  await s.sleep(800);
-  const tag = (n: number) => `[workflow:${L.auditName} step:${n}]`;
-  const audit1 = await Promise.all(L.auditTopics.map((topic) => s.spawn(null, 'general-purpose', `${tag(1)} ${topic}`, `${tag(1)} ${L.auditTask(topic)}`, sonnet)));
-  await Promise.all(audit1.map((a) => s.work(a.agentId, sonnet, { reads: rnd(1, 3), edits: rnd(0, 1) })));
-  const audit2 = await Promise.all([
-    s.spawn(null, 'general-purpose', `${tag(2)} ${L.fixes[0]}`, `${tag(2)} ${L.fixes[1]}`, opus),
-    s.spawn(null, 'Plan', `${tag(2)} ${L.report[0]}`, `${tag(2)} ${L.report[1]}`, opus),
-  ]);
-  await Promise.all([s.work(audit2[0]?.agentId ?? '', opus, { reads: 1, edits: 4, bash: 1 }), s.work(audit2[1]?.agentId ?? '', opus, { reads: 2, writes: 1 })]);
-  mark(3, 'completed');
-  mark(4, 'in_progress');
-  await s.todos(null, plan);
-  await pause(2500);
+  // The camera follows the running step of the audit (step 1, then step 2).
+  await step(16, group({ kind: 'workflow', index: 1 }, { kind: 'step', index: 1 }), async () => {
+    await s.hook('UserPromptSubmit', null, { prompt: L.auditPrompt, prompt_id: randomUUID(), source: 'user' });
+    const tag = (n: number) => `[workflow:${L.auditName} step:${n}]`;
+    const audit1 = await Promise.all(L.auditTopics.map((topic) => s.spawn(null, 'general-purpose', `${tag(1)} ${topic}`, `${tag(1)} ${L.auditTask(topic)}`, sonnet)));
+    await Promise.all(audit1.map((a) => s.work(a.agentId, sonnet, { reads: rnd(1, 3), edits: rnd(0, 1) })));
+    await s.sleep(1200);
+    const audit2 = await Promise.all([
+      s.spawn(null, 'general-purpose', `${tag(2)} ${L.fixes[0]}`, `${tag(2)} ${L.fixes[1]}`, opus),
+      s.spawn(null, 'Plan', `${tag(2)} ${L.report[0]}`, `${tag(2)} ${L.report[1]}`, opus),
+    ]);
+    await Promise.all([s.work(audit2[0]?.agentId ?? '', opus, { reads: 1, edits: 4, bash: 1 }), s.work(audit2[1]?.agentId ?? '', opus, { reads: 2, writes: 1 })]);
+    mark(3, 'completed');
+    mark(4, 'in_progress');
+    await s.todos(null, plan);
+  });
 
-  // 17 — streaming
-  await say(17, { kind: 'main' });
-  await s.stream(null, L.stream);
-  mark(4, 'completed');
-  await s.todos(null, plan);
-  await s.hook('TaskCompleted', null, { task_id: 'demo-task', task_subject: L.task });
-  await s.hook('Stop', null, { last_assistant_message: L.stop });
-  await pause(3500);
+  await step(17, main, async () => {
+    await s.stream(null, L.stream);
+    mark(4, 'completed');
+    await s.todos(null, plan);
+    await s.hook('TaskCompleted', null, { task_id: 'demo-task', task_subject: L.task });
+    await s.hook('Stop', null, { last_assistant_message: L.stop });
+  });
 
-  // 18 — end
-  await say(18, { kind: 'surface' });
-  await s.hook('SessionEnd', null, { reason: 'other' });
-  await pause(9000);
-  await s.narrate(18, N, L.end[0], L.end[1], { kind: 'overview' }, true);
-  return s.sessionId;
+  await step(18, { kind: 'surface' }, async () => {
+    await s.hook('SessionEnd', null, { reason: 'other' });
+    await s.sleep(6000); // fireworks
+  });
+
+  await s.narrate(N, N, L.end[0], L.end[1], { kind: 'overview' }, true);
 }
 
 /** Runs one demo at a time inside the server process. */

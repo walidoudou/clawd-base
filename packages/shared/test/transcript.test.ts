@@ -160,3 +160,47 @@ describe('meta.json and notifications', () => {
     expect(n).toEqual([{ taskIds: ['a', 'b'], toolUseId: null, status: 'stopped', summary: null }]);
   });
 });
+
+describe('TranscriptParser — real-world lines', () => {
+  const at = (sec: number) => Date.UTC(2026, 9, 2, 20, 52, sec);
+  const user = (sec: number, content: unknown, extra: Record<string, unknown> = {}) =>
+    JSON.stringify({ type: 'user', sessionId: SID, uuid: `x-${sec}`, parentUuid: 'p', timestamp: new Date(at(sec)).toISOString(), message: { role: 'user', content }, ...extra });
+  const parse = (lines: string[]) => {
+    const p = new TranscriptParser({ sessionId: SID, agentId: null });
+    return lines.flatMap((l) => p.parseLine(l));
+  };
+
+  it('a file starting with an undated title is dated by its first timestamp, not 1970', () => {
+    const evs = parse([JSON.stringify({ type: 'ai-title', aiTitle: 'Titre', sessionId: SID }), promptLine(5, 'bonjour')]);
+    expect(evs.find((e) => e.kind === 'session.title')).toMatchObject({ title: 'Titre', at: at(5) });
+    expect(evs.every((e) => e.at > 0)).toBe(true);
+  });
+
+  it('local commands, the /compact summary and shell input are not prompts', () => {
+    const evs = parse([
+      user(1, '<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args></command-args>', { promptId: 'shared' }),
+      user(2, '<local-command-stdout>Set model to Opus</local-command-stdout>'),
+      user(3, 'This session is being continued from a previous conversation…', { isCompactSummary: true }),
+      user(4, '<bash-input>ls</bash-input>'),
+      promptLine(5, 'la vraie question', 'shared'),
+    ]);
+    expect(evs.filter((e) => e.kind === 'prompt').map((e) => (e as { text: string }).text)).toEqual(['la vraie question']);
+  });
+
+  it('pressing Esc ends the turn', () => {
+    const evs = parse([promptLine(1, 'go'), user(2, [{ type: 'text', text: '[Request interrupted by user]' }])]);
+    expect(evs.filter((e) => e.kind === 'turn.end')).toHaveLength(1);
+    expect(evs.filter((e) => e.kind === 'prompt')).toHaveLength(1);
+  });
+
+  it('synthetic all-zero usage does not reset the context', () => {
+    const synthetic = JSON.stringify({
+      type: 'assistant',
+      sessionId: SID,
+      uuid: 's1',
+      timestamp: new Date(at(9)).toISOString(),
+      message: { id: 'msg_syn', role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text: 'No response requested.' }], stop_reason: 'stop_sequence', usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } },
+    });
+    expect(parse([synthetic]).filter((e) => e.kind === 'usage')).toEqual([]);
+  });
+});

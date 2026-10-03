@@ -178,7 +178,10 @@ export function AgentPanel({ agent }: { agent: Agent }) {
   const parent = agent.parentId ? data.agents.get(agent.parentId) : undefined;
   const wf = agent.workflowId ? data.workflows.get(agent.workflowId) : undefined;
   const now = Date.now();
-  const title = agent.kind === 'main' ? (data.sessions.get(agent.sessionId)?.title ?? t.mainRoom) : agentLabel(agent);
+  const session = data.sessions.get(agent.sessionId);
+  const title = agent.kind === 'main' ? (session?.title ?? t.mainRoom) : agentLabel(agent);
+  // The main agent never "ends" on its own (it can always resume): it ends with its session.
+  const endedAt = agent.endedAt ?? (agent.kind === 'main' ? (session?.endedAt ?? null) : null);
 
   return (
     <div className="panel-content">
@@ -194,7 +197,7 @@ export function AgentPanel({ agent }: { agent: Agent }) {
           </div>
           <div className="meta-row small muted">
             {t.started} {formatTime(agent.startedAt)}
-            {agent.endedAt ? ` · ${t.ended} ${formatTime(agent.endedAt)} · ${formatDuration(agent.endedAt - agent.startedAt)}` : ` · ${formatDuration(now - agent.startedAt)}`}
+            {endedAt ? ` · ${t.ended} ${formatTime(endedAt)} · ${formatDuration(endedAt - agent.startedAt)}` : ` · ${formatDuration(now - agent.startedAt)}`}
             {' · '}
             <span className="add">+{agent.added}</span> <span className="del">-{agent.removed}</span>
           </div>
@@ -215,7 +218,7 @@ export function AgentPanel({ agent }: { agent: Agent }) {
 
       {agent.waiting && (
         <div className="waiting-banner" role="alert">
-          ⚠ {t.waiting} : {agent.waiting}
+          ⚠ {t.toast.waiting(agent.waiting)}
         </div>
       )}
       {agent.liveText && (Date.now() - agent.liveTextAt < 15000 || !agent.liveTextFinal) && (

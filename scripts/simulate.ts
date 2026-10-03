@@ -10,8 +10,11 @@
  * Hook payloads go to POST /api/hook (same path as the real plugin); token usage, which
  * real sessions only expose through transcripts, is sent as normalized events to /api/events.
  * Simulated session ids start with "sim-" and are never persisted.
+ * If the server's <data dir>/server.json is readable (--data-dir, else the usual resolution), its port is
+ * the default and its token is sent, like the real hook script does.
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { TranscriptParser, eventsFromAgentMeta, type NormalizedEvent } from '../packages/shared/src/index.ts';
@@ -22,7 +25,22 @@ const opt = (name: string): string | undefined => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : undefined;
 };
-const PORT = Number(opt('port') ?? process.env['CLAWD_BASE_PORT'] ?? process.env['CLAUDE_DASH_PORT'] ?? 4317);
+const DATA_DIR = opt('data-dir') || process.env['CLAWD_BASE_DATA_DIR'] || process.env['CLAUDE_DASH_DATA_DIR'] || join(homedir(), '.clawd-base');
+
+/** Handshake file of the running server (see packages/server/src/runtime.ts). */
+function serverInfo(): { port: number; token: string } | null {
+  try {
+    const j = JSON.parse(readFileSync(join(DATA_DIR, 'server.json'), 'utf8')) as { app?: unknown; port?: unknown; token?: unknown };
+    if (j.app === 'clawd-base' && typeof j.port === 'number' && typeof j.token === 'string') return { port: j.port, token: j.token };
+  } catch {
+    /* no server.json: no token */
+  }
+  return null;
+}
+const INFO = serverInfo();
+const PORT = Number(opt('port') ?? process.env['CLAWD_BASE_PORT'] ?? process.env['CLAUDE_DASH_PORT'] ?? INFO?.port ?? 4317);
+// Only hand the token to the server that wrote it.
+const TOKEN = INFO && INFO.port === PORT ? INFO.token : null;
 const SPEED = Math.max(0.1, Number(opt('speed') ?? 1));
 const BASE = `http://127.0.0.1:${PORT}`;
 
@@ -30,7 +48,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms / SPEED));
 
 async function post(path: string, body: unknown): Promise<void> {
   try {
-    await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (TOKEN) headers['X-Clawd-Token'] = TOKEN;
+    await fetch(`${BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
   } catch {
     console.error(`[simulate] serveur injoignable sur ${BASE} — lancez d'abord \`npm run dev:server\` ou \`npm start\`.`);
     process.exit(1);

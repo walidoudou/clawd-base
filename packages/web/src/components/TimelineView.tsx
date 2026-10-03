@@ -77,6 +77,8 @@ export function TimelineView() {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
+  // The chart area only exists once a session is shown (first render after a reload has none yet).
+  const hasSession = sessionId !== null;
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -84,7 +86,7 @@ export function TimelineView() {
     ro.observe(el);
     setWidth(el.clientWidth);
     return () => ro.disconnect();
-  }, []);
+  }, [hasSession]);
 
   const session = sessionId ? data.sessions.get(sessionId) : undefined;
   const rows = useMemo(() => (sessionId ? buildRows(sessionId) : []), [sessionId, useDash.getState().version]);
@@ -102,9 +104,9 @@ export function TimelineView() {
   }, [rows, session, now]);
   const t1 = session && session.status !== 'active' && !anyActive ? Math.max(session.lastActivityAt, t0 + 1000) : now;
   const spanSec = Math.max(5, (t1 - t0) / 1000);
-  const fitPps = Math.max(0.0005, (width - LABEL_W - 40) / spanSec);
+  const fitPps = Math.max(0.0005, (width - 40) / spanSec);
   const scale = pps ?? fitPps;
-  const svgW = Math.max(width - LABEL_W, Math.ceil(spanSec * scale) + 40);
+  const svgW = Math.max(width, Math.ceil(spanSec * scale) + 40);
   const svgH = AXIS_H + rows.length * ROW_H + 8;
   const x = (at: number) => ((at - t0) / 1000) * scale;
 
@@ -122,8 +124,12 @@ export function TimelineView() {
   return (
     <div className="timeline-view">
       <div className="tl-toolbar">
-        <button onClick={() => setPps((scale || fitPps) * 2)}>＋</button>
-        <button onClick={() => setPps((scale || fitPps) / 2)}>－</button>
+        <button onClick={() => setPps((scale || fitPps) * 2)} aria-label={t.zoomIn} title={t.zoomIn}>
+          ＋
+        </button>
+        <button onClick={() => setPps((scale || fitPps) / 2)} aria-label={t.zoomOut} title={t.zoomOut}>
+          －
+        </button>
         <button className={pps === null ? 'on' : ''} onClick={() => setPps(null)}>
           {t.recenter}
         </button>

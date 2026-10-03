@@ -7,7 +7,7 @@ export const ContextGauge = memo(function ContextGauge({ used, window, compactio
   const pct = window > 0 ? Math.min(100, (used / window) * 100) : 0;
   const level = pct > 85 ? 'hot' : pct > 60 ? 'warm' : 'ok';
   return (
-    <div className={`ctx-gauge ${wide ? 'wide' : ''}`} title={`${t.context} : ${used.toLocaleString(intlLocale)} / ${window.toLocaleString(intlLocale)} tokens`}>
+    <div className={`ctx-gauge ${wide ? 'wide' : ''}`} title={t.labelled(t.context, `${used.toLocaleString(intlLocale)} / ${window.toLocaleString(intlLocale)} tokens`)}>
       <div className="ctx-bar" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} aria-label={t.context}>
         <span className={`ctx-fill ctx-${level}`} style={{ width: `${pct}%` }} />
       </div>

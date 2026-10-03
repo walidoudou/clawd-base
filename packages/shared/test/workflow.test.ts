@@ -124,3 +124,24 @@ describe('detectWorkflows — explicit', () => {
     expect(r.workflows[0]?.steps.map((s) => s.agentIds)).toEqual([['A', 'B'], ['C']]);
   });
 });
+
+describe('markers — real-world edge cases', () => {
+  it('ignores placeholders and markers quoted further down a prompt', () => {
+    expect(parseWorkflowMarker('use [workflow:<name> step:<n>] markers')).toBeNull();
+    expect(parseWorkflowMarker('[workflow:name step:n]')).toBeNull();
+    const r = detectWorkflows(S, [sp({ at: 1, description: 'review', prompt: 'Review this repo.\nGroup agents with [workflow:release step:1].' })]);
+    expect(r.workflows.filter((w) => w.source === 'marker')).toEqual([]);
+  });
+
+  it('launching the same named workflow again makes a second workflow', () => {
+    const r = detectWorkflows(S, [
+      sp({ at: 1, agentId: 'a1', description: '[workflow:release step:1] build' }),
+      sp({ at: 2, agentId: 'b1', description: '[workflow:release step:2] ship' }),
+      sp({ at: 900_000, agentId: 'a2', description: '[workflow:release step:1] build' }),
+      sp({ at: 900_001, agentId: 'b2', description: '[workflow:release step:2] ship' }),
+    ]);
+    const runs = r.workflows.filter((w) => w.source === 'marker');
+    expect(runs.map((w) => w.steps.map((s) => s.agentIds))).toEqual([[['a1'], ['b1']], [['a2'], ['b2']]]);
+    expect(new Set(runs.map((w) => w.id)).size).toBe(2);
+  });
+});

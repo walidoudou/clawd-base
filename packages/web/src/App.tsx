@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { t } from './i18n/index.ts';
 import { data, useDash } from './state.ts';
 import { connect } from './connection.ts';
@@ -14,24 +14,40 @@ import { DemoOverlay } from './components/DemoOverlay.tsx';
 
 const GameView = lazy(() => import('./scene/GameView.tsx'));
 
+function isTyping(e: KeyboardEvent): boolean {
+  const el = e.target as HTMLElement | null;
+  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+}
+
 function SidePanel() {
   useDash((s) => s.version);
   const selection = useDash((s) => s.selection);
   const select = useDash((s) => s.select);
+  const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') select(null);
+      if (e.key === 'Escape' && !isTyping(e)) select(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [select]);
+  // Keyboard users land in the panel when it opens, and back where they were when it closes.
+  const selKey = selection ? `${selection.kind}:${selection.id}` : '';
+  useEffect(() => {
+    if (!selKey) return;
+    const previous = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (previous && document.contains(previous)) previous.focus({ preventScroll: true });
+    };
+  }, [selKey]);
   if (!selection) return null;
   const agent = selection.kind === 'agent' ? data.agents.get(selection.id) : undefined;
   const workflow = selection.kind === 'workflow' ? data.workflows.get(selection.id) : undefined;
   if (!agent && !workflow) return null;
   return (
     <aside className="side-panel" aria-label={agent ? t.agent : t.workflow}>
-      <button className="close" onClick={() => select(null)} aria-label={t.close} title={`${t.close} (Échap)`}>
+      <button ref={closeRef} className="close" onClick={() => select(null)} aria-label={t.close} title={`${t.close} (${t.escKey})`}>
         ✕
       </button>
       {agent && <AgentPanel key={agent.id} agent={agent} />}

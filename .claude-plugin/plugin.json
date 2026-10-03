@@ -1,6 +1,6 @@
 {
   "name": "clawd-base",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Local, real-time pixel-art dashboard for Claude Code: sessions, sub-agents, workflows, tokens and diffs, shown as an animated underground base.",
   "author": {
     "name": "walidoudou",

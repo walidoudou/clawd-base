@@ -185,7 +185,7 @@ Les sprites (`packages/shared/src/sprites/`) sont des grilles de caractères ave
 { "port": 4317, "spriteSet": "mole", "persist": true, "maxAgeHours": 24 }
 ```
 
-`spriteSet` : `"mole"` (par défaut, la taupe Taupi) ou `"clawd"`. Variables d'environnement (les anciennes `CLAUDE_DASH_*` restent acceptées) : `CLAWD_BASE_PORT` (serveur **et** hooks), `CLAWD_BASE_DATA_DIR`, `CLAWD_BASE_PROJECTS_DIR`, `CLAWD_BASE_STREAM`, et `CLAWD_BASE_CAPTURE=<fichier.jsonl>` pour enregistrer les payloads bruts des hooks (debug). Options du serveur : `--port`, `--projects-dir`, `--data-dir`, `--no-persist`, `--max-age-hours`.
+`spriteSet` : `"mole"` (par défaut, la taupe Taupi) ou `"clawd"`. Variables d'environnement (les anciennes `CLAUDE_DASH_*` restent acceptées) : `CLAWD_BASE_PORT` (serveur **et** hooks), `CLAWD_BASE_DATA_DIR`, `CLAWD_BASE_PROJECTS_DIR`, `CLAWD_BASE_STREAM`, et `CLAWD_BASE_CAPTURE=<fichier.jsonl>` pour enregistrer les payloads bruts des hooks (debug) ; placez-les dans le bloc `env` de `~/.claude/settings.json` pour que les hooks et `/dashboard` les voient tous les deux. Les transcripts sont lus dans `~/.claude/projects`, ou `$CLAUDE_CONFIG_DIR/projects` si `CLAUDE_CONFIG_DIR` est défini. Options du serveur : `--port`, `--projects-dir`, `--data-dir`, `--no-persist`, `--max-age-hours`.
 
 ## Confidentialité et sécurité
 
@@ -193,6 +193,8 @@ Les sprites (`packages/shared/src/sprites/`) sont des grilles de caractères ave
 - Aucune requête externe, aucune télémétrie, aucun CDN : polices système, sprites et tuiles générés dans le code, dépendances empaquetées.
 - Le hook ne bloque jamais Claude Code : il se termine toujours avec le code 0, n'écrit rien, s'arrête au bout de 0,8 s de requête (1,5 s au maximum) et se termine en ~40 ms si le serveur est arrêté. Seul le `PreToolUse` des outils Write/Edit est synchrone (timeout 2 s), pour capturer le fichier avant modification.
 - Limites mémoire : sorties d'outils tronquées à 4 000 caractères, snapshots ≤ 512 Ko (32 Mo au total), 600 lignes de diff par modification, 2 000 outils par agent, 40 sessions.
+- `~/.clawd-base` n'est lisible que par vous (0700, fichiers en 0600). À chaque démarrage, le serveur y écrit `server.json` (port + jeton aléatoire) ; le hook envoie ce jeton, et seuls les hooks authentifiés amènent le serveur à lire des fichiers (snapshots pour les diffs). Sur une machine partagée, les autres comptes locaux peuvent toujours joindre `127.0.0.1` et ouvrir le tableau de bord, mais pas lui faire lire vos fichiers.
+- Après une mise à jour du plugin, `/dashboard` arrête l'ancien serveur (`POST /api/shutdown` authentifié) et démarre le nouveau.
 
 ## Hypothèses
 

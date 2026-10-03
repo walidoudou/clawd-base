@@ -1,13 +1,14 @@
 import { Application, Container, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { animationFor, formatTokens, mulberry32, type Agent, type Anim, type Workflow } from '@dash/shared';
+import { animationFor, formatTokens, mulberry32, type Agent, type Anim, type NarrationFocus, type Workflow } from '@dash/shared';
 import { t } from '../i18n/index.ts';
 import { activeStepIndex, agentLabel, data, isActive, isArchived, mascotSeed, sessionAgents, sessionWorkflows, useDash } from '../state.ts';
 import { basename, formatDuration, modelBadge, preview } from '../format.ts';
 import { toolCategory, toolDisplayName } from '../tools.ts';
 import { computeLayout, levelTop, ROOM_X0, SHAFT_W, SHAFT_X, type SceneLayout, type Wire } from './layout.ts';
+import { focusSlots, frameRects, maxZoomFor, smoothDamp } from './camera.ts';
 import { RoomView, type BoardLine, type RoomInfo, type StepBox } from './Room.ts';
 import { dirtTexture, elevatorTexture, grassTexture, hutTexture, releaseSeed, rockTexture, treeTexture, type PropKind } from './textures.ts';
-import { LEVEL, ROOM_H, SLAB, type FillerKind, type Stations } from './tiles.ts';
+import { ROOM_H, SLAB, type FillerKind, type Stations } from './tiles.ts';
 import { ParticleSystem } from './particles.ts';
 
 const STATUS_COLOR: Record<string, string> = { starting: '#6cc4ff', running: '#6cc4ff', idle: '#b9a8d6', done: '#7ee08f', error: '#ff6b6b' };
@@ -25,7 +26,15 @@ export interface FocusRect {
 }
 
 /** Camera request coming from the guided demo narration. */
-export type FocusRequest = { kind: 'main' } | { kind: 'overview' } | { kind: 'surface' } | { kind: 'workflow'; index: number } | { kind: 'agent'; toolUseId: string };
+export type FocusRequest = NarrationFocus;
+
+/** Screen margins covered by overlays (demo caption, side panel), in CSS pixels. */
+export interface Insets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
 
 export interface MinimapData {
   bounds: { x: number; y: number; w: number; h: number };
@@ -127,8 +136,10 @@ export class BaseScene {
   private meteorState: { x: number; y: number; vx: number; vy: number; start: number } | null = null;
   private cabMoving = false;
   private landingUntil = 0;
-  private focusRequest: { req: FocusRequest; at: number } | null = null;
-  private demoFollow = false;
+  /** Guided demo: what the camera keeps framing until the next caption or a user gesture. */
+  private track: { req: FocusRequest; since: number; setAt: number; zoomCap: number; applied: boolean } | null = null;
+  /** Overlays covering the canvas (set by the React wrapper). */
+  insets: () => Insets = () => ({ top: 0, right: 0, bottom: 0, left: 0 });
   private readonly rooms = new Map<string, RoomView>();
   private layout: SceneLayout | null = null;
   private layoutSig = '';
@@ -137,13 +148,23 @@ export class BaseScene {
   zoom = 2;
   private camX = 0;
   private camY = 0;
+  /** Camera animation target (null = at rest) and spring velocities. */
   private camTX: number | null = null;
   private camTY: number | null = null;
+  private zoomT: number | null = null;
+  private velX = 0;
+  private velY = 0;
+  private velZ = 0;
+  private lastTickAt = performance.now();
+  private lastCamEmit = 0;
+  /** Zoom the room texts are rasterised for. */
+  private textZoom = 2;
   private dragging: { x: number; y: number; camX: number; camY: number; moved: boolean } | null = null;
   private suppressTap = false;
   compactForced = false;
   follow = false;
   private destroyed = false;
+  private resizeObserver: ResizeObserver | null = null;
   /** Pixi is initialised (app.screen/renderer exist). Data may arrive before that. */
   private ready = false;
   private lastSync = 0;
@@ -168,6 +189,11 @@ export class BaseScene {
       return;
     }
     host.appendChild(this.app.canvas);
+    // Pixi only follows window resizes; the host also changes when the HUD wraps or panels open.
+    this.resizeObserver = new ResizeObserver(() => {
+      if (this.ready && !this.destroyed) this.app.resize();
+    });
+    this.resizeObserver.observe(host);
     this.app.stage.addChild(this.sky, this.stars, this.meteor, this.world);
     this.world.addChild(this.ground, this.fireflies, this.structure, this.cablesG, this.roomsLayer, this.cab, this.landingLight, this.antennaLight, this.fxLayer);
     this.makeFireflies();
@@ -180,8 +206,10 @@ export class BaseScene {
     this.app.renderer.on('resize', () => {
       this.drawSky(true);
       this.applyCamera();
+      // The visible area changed (window, HUD wrapping): re-frame what the demo is showing.
+      this.requestSync();
     });
-    this.zoom = window.innerWidth > 2200 ? 3 : 2;
+    this.zoom = this.textZoom = window.innerWidth > 2200 ? 3 : 2;
     this.ready = true;
     this.drawSky(true);
     this.requestSync();
@@ -191,6 +219,7 @@ export class BaseScene {
     const wasReady = this.ready;
     this.destroyed = true;
     this.ready = false;
+    this.resizeObserver?.disconnect();
     // If init() is still pending it will destroy the app itself once the renderer exists.
     if (!wasReady) return;
     for (const r of this.rooms.values()) if (r.seed) releaseSeed(r.seed);
@@ -250,62 +279,61 @@ export class BaseScene {
     }
   }
 
-  /** Guided demo: point the camera at something (resolved as soon as the room exists). */
-  setFocus(req: FocusRequest | null): void {
-    this.focusRequest = req ? { req, at: performance.now() } : null;
-    this.demoFollow = req?.kind === 'overview';
+  /**
+   * Guided demo: frame something until the next caption. Rooms are resolved on every sync, so the
+   * camera waits for rooms that do not exist yet and follows them when the base reshuffles.
+   */
+  setFocus(req: FocusRequest | null, since = Date.now()): void {
+    this.track = req ? { req, since, setAt: performance.now(), zoomCap: Infinity, applied: false } : null;
     this.requestSync();
   }
 
-  private resolveFocus(layout: SceneLayout, sessionId: string): void {
-    const f = this.focusRequest;
-    if (!f) return;
-    if (performance.now() - f.at > 20_000) {
-      this.focusRequest = null;
+  /** Zoom levels the camera may use: half steps stay pixel-perfect on 2× screens. */
+  private zoomSteps(): number[] {
+    return (window.devicePixelRatio || 1) >= 2 ? [3, 2.5, 2, 1.5, 1] : [3, 2, 1];
+  }
+
+  private safeArea(): { x: number; y: number; w: number; h: number } {
+    const sw = this.app.screen.width;
+    const sh = this.app.screen.height;
+    const i = this.insets();
+    const w = Math.max(160, sw - i.left - i.right);
+    const h = Math.max(120, sh - i.top - i.bottom);
+    return { x: Math.min(i.left, sw - w), y: Math.min(i.top, sh - h), w, h };
+  }
+
+  /** Re-aim the camera at the tracked rooms (called on every sync: rooms appear, move and shrink). */
+  private updateTracking(layout: SceneLayout, sessionId: string): void {
+    const tr = this.track;
+    if (!tr) return;
+    if (tr.req.kind === 'surface') {
+      // Sky and first level: the fireworks go off above the hut.
+      if (tr.applied) return;
+      tr.applied = true;
+      const f = frameRects([{ x: SHAFT_X - 60, y: -230, w: 760, h: 270 }], 2, { w: this.app.screen.width, h: this.app.screen.height }, this.safeArea(), this.zoomSteps());
+      this.animateTo(f.x, f.y, f.zoom);
       return;
     }
-    const sw = this.app.screen.width;
-    let key: string | null = null;
-    let zoom = 2;
-    let offsetY = 0;
-    switch (f.req.kind) {
-      case 'main':
-        key = `main:${sessionId}`;
-        zoom = sw >= 1100 ? 3 : 2;
-        break;
-      case 'agent':
-        key = `agent:${f.req.toolUseId}`;
-        break;
-      case 'workflow': {
-        const wf = sessionWorkflows(sessionId)[f.req.index];
-        if (wf) key = `wf:${wf.id}`;
-        offsetY = Math.round(LEVEL * 0.6);
-        break;
-      }
-      case 'surface': {
-        // Sky + first level: fireworks happen above the hut.
-        if (this.zoom !== 2) this.zoom = 2;
-        const vh = this.app.screen.height / this.zoom;
-        this.panTo(Math.max(this.app.screen.width / this.zoom / 2 - 20, 300), -40 + vh / 2 - 100);
-        this.focusRequest = null;
-        return;
-      }
-      case 'overview': {
-        const main = layout.rooms.find((r) => r.kind === 'main');
-        if (this.zoom !== 2) this.zoom = 2;
-        if (main && !this.activeRoomKey) this.panTo(main.x + this.app.screen.width / 4, main.y + LEVEL);
-        this.focusRequest = null;
-        return;
-      }
-    }
-    const slot = key ? layout.rooms.find((r) => r.key === key) : undefined;
-    if (!slot) return; // not built yet: retry on next sync
-    if (this.zoom !== zoom) {
-      this.zoom = zoom;
-      this.applyCamera();
-    }
-    this.panTo(slot.x + slot.w / 2, slot.y + slot.h / 2 + offsetY);
-    this.focusRequest = null;
+    const { slots, complete } = focusSlots(tr.req, { sessionId, since: tr.since, rooms: layout.rooms, workflows: sessionWorkflows(sessionId), agents: data.agents.values(), agent: (id) => data.agents.get(id) });
+    // Rooms not built yet: stay put and retry on the next sync (frame what exists after a while).
+    if (!slots.length || (!complete && !tr.applied && performance.now() - tr.setAt < 2500)) return;
+    // Never zoom back in during one caption: rooms shrinking when done would make the camera pump.
+    const screen = { w: this.app.screen.width, h: this.app.screen.height };
+    const f = frameRects(slots, Math.min(maxZoomFor(tr.req), tr.zoomCap), screen, this.safeArea(), this.zoomSteps());
+    tr.zoomCap = f.zoom;
+    tr.applied = true;
+    const cx = this.camTX ?? this.camX;
+    const cy = this.camTY ?? this.camY;
+    const cz = this.zoomT ?? this.zoom;
+    if (Math.abs(f.x - cx) < 2 && Math.abs(f.y - cy) < 2 && f.zoom === cz) return;
+    this.animateTo(f.x, f.y, f.zoom);
+  }
+
+  /** A user gesture takes the camera back from the guided demo (until its next caption). */
+  private userCamera(): void {
+    this.track = null;
+    this.camTX = this.camTY = this.zoomT = null;
+    this.velX = this.velY = this.velZ = 0;
   }
 
   private buildGround(layout: SceneLayout): void {
@@ -396,12 +424,24 @@ export class BaseScene {
 
   private bindInput(): void {
     const canvas = this.app.canvas;
+    // Trackpads send dozens of small wheel events per gesture: accumulate them and take at most
+    // one zoom step per 140 ms (a mouse notch, ~100 px, still zooms at once).
+    let wheelAcc = 0;
+    let lastWheel = 0;
+    let lastStep = 0;
     canvas.addEventListener(
       'wheel',
       (e) => {
         e.preventDefault();
+        const now = performance.now();
+        if (now - lastWheel > 300) wheelAcc = 0;
+        lastWheel = now;
+        wheelAcc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+        if (Math.abs(wheelAcc) < 50 || now - lastStep < 140) return;
         const rect = canvas.getBoundingClientRect();
-        this.zoomAt(e.deltaY < 0 ? 1 : -1, e.clientX - rect.left, e.clientY - rect.top);
+        this.zoomAt(wheelAcc < 0 ? 1 : -1, e.clientX - rect.left, e.clientY - rect.top);
+        wheelAcc = 0;
+        lastStep = now;
       },
       { passive: false },
     );
@@ -413,11 +453,18 @@ export class BaseScene {
       if (!d) return;
       const dx = e.global.x - d.x;
       const dy = e.global.y - d.y;
-      if (!d.moved && Math.hypot(dx, dy) > 4) d.moved = true;
+      if (!d.moved && Math.hypot(dx, dy) > 4) {
+        d.moved = true;
+        // Grab the camera where it is, even mid-flight.
+        this.userCamera();
+        d.camX = this.camX;
+        d.camY = this.camY;
+        d.x = e.global.x;
+        d.y = e.global.y;
+      }
       if (d.moved) {
-        this.camTX = this.camTY = null;
-        this.camX = d.camX - dx / this.zoom;
-        this.camY = d.camY - dy / this.zoom;
+        this.camX = d.camX - (e.global.x - d.x) / this.zoom;
+        this.camY = d.camY - (e.global.y - d.y) / this.zoom;
         this.applyCamera();
       }
     });
@@ -434,46 +481,61 @@ export class BaseScene {
     if (!this.ready) return;
     sx ??= this.app.screen.width / 2;
     sy ??= this.app.screen.height / 2;
-    const next = Math.max(1, Math.min(6, this.zoom + dir));
+    const base = this.zoomT ?? this.zoom;
+    const next = Math.max(1, Math.min(6, Math.round(base * 2) / 2 + dir));
+    this.userCamera();
     if (next === this.zoom) return;
     const wx = this.camX + (sx - this.app.screen.width / 2) / this.zoom;
     const wy = this.camY + (sy - this.app.screen.height / 2) / this.zoom;
     this.zoom = next;
     this.camX = wx - (sx - this.app.screen.width / 2) / this.zoom;
     this.camY = wy - (sy - this.app.screen.height / 2) / this.zoom;
-    this.camTX = this.camTY = null;
     this.applyCamera();
+  }
+
+  /** Glide the camera to a world point and zoom (spring, retargetable while moving). */
+  private animateTo(x: number, y: number, zoom = this.zoomT ?? this.zoom): void {
+    this.camTX = x;
+    this.camTY = y;
+    this.zoomT = zoom;
   }
 
   /** Move the camera to a world point (smoothly unless `immediate`). */
   panTo(x: number, y: number, immediate = false): void {
     if (immediate) {
+      this.camTX = this.camTY = this.zoomT = null;
+      this.velX = this.velY = this.velZ = 0;
       this.camX = x;
       this.camY = y;
-      this.camTX = this.camTY = null;
       this.applyCamera();
-    } else {
-      this.camTX = x;
-      this.camTY = y;
-    }
+    } else this.animateTo(x, y);
   }
 
-  recenter(): void {
+  /** Fit the whole base (the "Recentrer" button, and the first view of a session). */
+  recenter(immediate = false): void {
     if (!this.ready) return;
     const l = this.layout;
     if (!l) return;
+    if (!immediate) this.userCamera();
     const sw = this.app.screen.width;
     const sh = this.app.screen.height;
     const fit = Math.floor(Math.min(sw / (l.bounds.w + 48), sh / (l.bounds.h + 48)));
+    let zoom: number;
+    let x: number;
+    let y: number;
     if (fit >= 2) {
-      this.zoom = Math.min(fit, 3);
-      this.panTo(l.bounds.x + l.bounds.w / 2, l.bounds.y + l.bounds.h / 2, true);
+      zoom = Math.min(fit, 3);
+      x = l.bounds.x + l.bounds.w / 2;
+      y = l.bounds.y + l.bounds.h / 2;
     } else {
-      this.zoom = sw > 1500 ? 2 : 1;
-      const vw = sw / this.zoom;
-      const vh = sh / this.zoom;
-      this.panTo(l.bounds.x + Math.min(l.bounds.w, vw) / 2 - 8, l.bounds.y + vh / 2 - 8, true);
+      zoom = sw > 1500 ? 2 : 1;
+      x = l.bounds.x + Math.min(l.bounds.w, sw / zoom) / 2 - 8;
+      y = l.bounds.y + sh / zoom / 2 - 8;
     }
+    if (immediate) {
+      this.zoom = zoom;
+      this.panTo(x, y, true);
+    } else this.animateTo(x, y, zoom);
   }
 
   focusRoom(key: string): void {
@@ -482,18 +544,40 @@ export class BaseScene {
     if (!r) return;
     const b = r.bounds;
     const v = this.viewRect();
-    if (b.x < v.x || b.y < v.y || b.x + b.w > v.x + v.w || b.y + b.h > v.y + v.h) this.panTo(b.x + b.w / 2, b.y + b.h / 2);
+    if (b.x < v.x || b.y < v.y || b.x + b.w > v.x + v.w || b.y + b.h > v.y + v.h) {
+      this.userCamera();
+      this.animateTo(b.x + b.w / 2, b.y + b.h / 2);
+    }
   }
 
   /** Minimap click: centre on a world point. */
   centerOn(x: number, y: number): void {
-    this.panTo(x, y);
+    this.userCamera();
+    this.animateTo(x, y);
   }
 
   private viewRect(): { x: number; y: number; w: number; h: number } {
     const w = this.app.screen.width / this.zoom;
     const h = this.app.screen.height / this.zoom;
     return { x: this.camX - w / 2, y: this.camY - h / 2, w, h };
+  }
+
+  /** Advance the camera spring by `dt` seconds. */
+  private stepCamera(dt: number): void {
+    if (this.camTX === null || this.camTY === null) return;
+    const zt = this.zoomT ?? this.zoom;
+    [this.camX, this.velX] = smoothDamp(this.camX, this.camTX, this.velX, 0.33, dt);
+    [this.camY, this.velY] = smoothDamp(this.camY, this.camTY, this.velY, 0.33, dt);
+    [this.zoom, this.velZ] = smoothDamp(this.zoom, zt, this.velZ, 0.3, dt);
+    const rest = Math.abs(this.camTX - this.camX) < 0.3 && Math.abs(this.camTY - this.camY) < 0.3 && Math.abs(zt - this.zoom) < 0.003 && Math.abs(this.velX) + Math.abs(this.velY) < 6;
+    if (rest) {
+      this.camX = this.camTX;
+      this.camY = this.camTY;
+      this.zoom = zt;
+      this.camTX = this.camTY = this.zoomT = null;
+      this.velX = this.velY = this.velZ = 0;
+    }
+    this.applyCamera();
   }
 
   private applyCamera(): void {
@@ -505,14 +589,23 @@ export class BaseScene {
     this.world.scale.set(this.zoom);
     this.world.position.set(ox, oy);
     this.stars.position.set(Math.round((-this.camX * 0.05) % 2400), Math.round(Math.min(0, -this.camY * 0.05)));
-    const res = this.zoom * (window.devicePixelRatio || 1);
-    const detail = this.zoom <= 1 ? 'low' : 'full';
+    // Texts are re-rasterised when their resolution changes: during a zoom, keep the sharper of
+    // both ends so this happens at most once at the start (zoom in) or once at the end (zoom out).
+    const moving = this.zoomT !== null;
+    this.textZoom = moving ? Math.max(this.zoomT ?? this.zoom, this.textZoom) : this.zoom;
+    const res = this.textZoom * (window.devicePixelRatio || 1);
+    const detail = this.zoom < 1.25 ? 'low' : 'full';
     for (const r of this.rooms.values()) {
       r.setTextResolution(res);
       r.setDetail(detail);
     }
-    this.emitFocusRects();
-    this.emitMinimap(true);
+    // React overlays (focus buttons, minimap) do not need 60 updates per second while gliding.
+    const now = performance.now();
+    if (!moving || now - this.lastCamEmit > 120) {
+      this.lastCamEmit = now;
+      this.emitFocusRects();
+      this.emitMinimap(true);
+    }
   }
 
   private emitFocusRects(): void {
@@ -585,7 +678,9 @@ export class BaseScene {
       .filter((w) => w.steps.length > 0);
     const compact = this.compactForced || agents.length - 1 > 14;
     const main = agents.find((a) => a.kind === 'main');
-    const maxRowWidth = Math.max(1180, Math.floor(this.app.screen.width / Math.max(1, this.zoom)) - 40);
+    // Independent of the zoom (zooming must never reshuffle the rooms); the main room and three
+    // agents, the most common case, share one row.
+    const maxRowWidth = Math.max(1320, Math.floor(this.app.screen.width / 2) - 40);
     const layout = computeLayout(main, agents, workflows, { compact, maxRowWidth });
     const firstLayoutForSession = this.centeredFor !== sessionId;
     const sig = `${layout.rooms.map((r) => `${r.key}@${r.x},${r.y},${r.w}`).join('|')}#${layout.levels}`;
@@ -601,11 +696,12 @@ export class BaseScene {
     this.layout = layout;
 
     const seen = new Set<string>();
-    const detail = this.zoom <= 1 ? 'low' : 'full';
+    const detail = this.zoom < 1.25 ? 'low' : 'full';
     let mostRecent: { key: string; at: number; level: number } | null = null;
     for (const slot of layout.rooms) {
       seen.add(slot.key);
       let room = this.rooms.get(slot.key);
+      room?.revive();
       const isNew = !room;
       if (!room) {
         room = new RoomView(
@@ -618,7 +714,7 @@ export class BaseScene {
                 if (cur && cur.entity !== 'filler') useDash.getState().select({ kind: cur.entity, id: cur.id });
               },
         );
-        room.setTextResolution(this.zoom * (window.devicePixelRatio || 1));
+        room.setTextResolution(this.textZoom * (window.devicePixelRatio || 1));
         room.setDetail(detail);
         this.rooms.set(slot.key, room);
         this.roomsLayer.addChild(room);
@@ -638,12 +734,16 @@ export class BaseScene {
     for (const [key, room] of this.rooms) if (!seen.has(key)) room.markRemoving(nowP);
 
     this.trackTransitions(sessionId, allWorkflows);
-    this.resolveFocus(layout, sessionId);
+    if (firstLayoutForSession) {
+      this.centeredFor = sessionId;
+      this.recenter(true);
+    }
+    this.updateTracking(layout, sessionId);
 
     // The elevator goes to the level with the most recent activity.
     this.cabTargetY = levelTop(mostRecent?.level ?? 0) + ROOM_H - 46;
     if (firstLayoutForSession) this.cabY = this.cabTargetY;
-    if ((this.follow || this.demoFollow) && mostRecent && mostRecent.key !== this.activeRoomKey) {
+    if (this.follow && !this.track && mostRecent && mostRecent.key !== this.activeRoomKey) {
       const target = mostRecent.key;
       const r = layout.rooms.find((x) => x.key === target);
       if (r) this.panTo(r.x + r.w / 2, r.y + r.h / 2);
@@ -662,13 +762,8 @@ export class BaseScene {
       });
     }
 
-    if (firstLayoutForSession) {
-      this.centeredFor = sessionId;
-      this.recenter();
-    } else {
-      this.emitFocusRects();
-      this.emitMinimap();
-    }
+    this.emitFocusRects();
+    this.emitMinimap();
   }
 
   /** One-shot celebrations: session end fireworks, workflow done confetti, packets on new agents. */
@@ -884,16 +979,8 @@ export class BaseScene {
     const now = performance.now();
     const animFrame = Math.floor(now / 420);
     const fastFrame = Math.floor(now / 170);
-    if (this.camTX !== null && this.camTY !== null) {
-      this.camX += (this.camTX - this.camX) * 0.14;
-      this.camY += (this.camTY - this.camY) * 0.14;
-      if (Math.abs(this.camTX - this.camX) < 0.5 && Math.abs(this.camTY - this.camY) < 0.5) {
-        this.camX = this.camTX;
-        this.camY = this.camTY;
-        this.camTX = this.camTY = null;
-      }
-      this.applyCamera();
-    }
+    this.stepCamera(Math.min(0.05, (now - this.lastTickAt) / 1000));
+    this.lastTickAt = now;
     const v = this.viewRect();
     const margin = 64;
     for (const [key, room] of this.rooms) {

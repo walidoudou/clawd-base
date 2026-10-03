@@ -96,7 +96,8 @@ The first two play the guided demo over HTTP against a running server; `--replay
 ```
 
 - `spriteSet`: `"mole"` (default, original mascot "Taupi") or `"clawd"`.
-- Environment variables: `CLAWD_BASE_PORT` (server **and** hooks), `CLAWD_BASE_DATA_DIR`, `CLAWD_BASE_PROJECTS_DIR`, `CLAWD_BASE_STREAM`, `CLAWD_BASE_CAPTURE=<file.jsonl>` (records raw hook payloads, for debugging).
+- Environment variables: `CLAWD_BASE_PORT` (server **and** hooks), `CLAWD_BASE_DATA_DIR`, `CLAWD_BASE_PROJECTS_DIR`, `CLAWD_BASE_STREAM`, `CLAWD_BASE_CAPTURE=<file.jsonl>` (records raw hook payloads, for debugging). Put them in the `env` block of `~/.claude/settings.json` so the hooks and `/dashboard` both see them.
+- Transcripts are read from `~/.claude/projects`, or `$CLAUDE_CONFIG_DIR/projects` when `CLAUDE_CONFIG_DIR` is set.
 - Server flags: `--port`, `--projects-dir`, `--data-dir`, `--no-persist`, `--max-age-hours`.
 
 **Custom mascot**: add a `SpriteSet` in `packages/shared/src/sprites/` (8 animations as character grids + palette + anchors), register it in `SPRITE_SETS`, and select it with `spriteSet`. Every agent still gets a unique, deterministic look (FNV-1a hash of its id → seeded RNG → colour, accessory, detail); workflow chiefs always wear a crown or a chef hat.
@@ -123,6 +124,8 @@ Every fact (from a hook or a transcript line) becomes a `NormalizedEvent`, reduc
 - Bound to `127.0.0.1`; non-local `Host`/`Origin` headers are rejected (DNS-rebinding / CSRF protection).
 - The hook never blocks Claude Code: it always exits 0, prints nothing, times out after 0.8 s (hard limit 1.5 s), and exits in ~40 ms when the server is down. Only Write/Edit `PreToolUse` is synchronous (2 s timeout) to snapshot the file before it changes.
 - Memory caps everywhere (tool outputs, snapshots, diffs, tools per agent, sessions, SSE replay buffer in bytes, textures).
+- `~/.clawd-base` is owner-only (0700, files 0600). Each server run writes `server.json` there (port + a random token); the hook sends that token, and only authenticated hooks make the server read files (snapshots for diffs). On a shared machine, other local accounts can still reach `127.0.0.1` and open the dashboard, but cannot make it read your files.
+- After a plugin update, `/dashboard` stops the previous server (authenticated `POST /api/shutdown`) and starts the new one.
 
 ## Known limitations
 

@@ -25,7 +25,10 @@ export function setLocale(l: Locale): void {
   } catch {
     /* ignore */
   }
-  location.reload();
+  // ?lang= in the URL would win over the saved choice: drop it.
+  const url = new URL(location.href);
+  url.searchParams.delete('lang');
+  location.replace(url.toString());
 }
 
 export const locale: Locale = currentLocale();

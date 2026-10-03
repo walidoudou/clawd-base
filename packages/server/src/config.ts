@@ -19,7 +19,7 @@ export interface ServerConfig {
 }
 
 export const APP_ID = 'clawd-base';
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 export const DEFAULT_PORT = 4317;
 
 /** Environment variable `CLAWD_BASE_<name>` (legacy `CLAUDE_DASH_<name>` still accepted). */
@@ -41,7 +41,9 @@ function findWebDir(): string | null {
 }
 
 export function loadConfig(argv: string[] = process.argv.slice(2)): ServerConfig {
-  const dataDir = arg(argv, 'data-dir') ?? env('DATA_DIR') ?? process.env['CLAUDE_PLUGIN_DATA'] ?? join(homedir(), '.clawd-base');
+  // Not CLAUDE_PLUGIN_DATA: Claude Code sets it for hooks but not for the /dashboard command, so the
+  // hook and the server would read different config.json files (and disagree on the port).
+  const dataDir = arg(argv, 'data-dir') ?? env('DATA_DIR') ?? join(homedir(), '.clawd-base');
   let file: Record<string, unknown> = {};
   const cfgPath = join(dataDir, 'config.json');
   if (existsSync(cfgPath)) {
@@ -56,7 +58,7 @@ export function loadConfig(argv: string[] = process.argv.slice(2)): ServerConfig
   return {
     host: '127.0.0.1',
     port: Number.isFinite(port) ? port : DEFAULT_PORT,
-    projectsDir: arg(argv, 'projects-dir') ?? env('PROJECTS_DIR') ?? (typeof file['projectsDir'] === 'string' ? (file['projectsDir'] as string) : join(homedir(), '.claude', 'projects')),
+    projectsDir: arg(argv, 'projects-dir') ?? env('PROJECTS_DIR') ?? (typeof file['projectsDir'] === 'string' ? (file['projectsDir'] as string) : join(process.env['CLAUDE_CONFIG_DIR'] || join(homedir(), '.claude'), 'projects')),
     dataDir,
     persist: !argv.includes('--no-persist') && file['persist'] !== false,
     maxAgeHours: num(arg(argv, 'max-age-hours')) ?? num(file['maxAgeHours']) ?? 24,

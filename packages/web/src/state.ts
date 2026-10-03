@@ -158,7 +158,13 @@ function bump(): void {
     // The guided demo pins its session; once it is over, auto-follow takes over again.
     const pinned = st.pinnedSession && !(st.sessionId && data.sessions.get(st.sessionId)?.narration?.done);
     const sessionId = pickSession(st.sessionId, pinned);
-    useDash.setState({ version: st.version + 1, sessionId, pinnedSession: pinned });
+    // Following another session: a panel open on the previous one would show the wrong session.
+    let selection = st.selection;
+    if (sessionId !== st.sessionId && selection) {
+      const owner = selection.kind === 'agent' ? data.agents.get(selection.id)?.sessionId : data.workflows.get(selection.id)?.sessionId;
+      if (owner !== sessionId) selection = null;
+    }
+    useDash.setState({ version: st.version + 1, sessionId, pinnedSession: pinned, selection });
     updateTitle(sessionId);
   });
 }
@@ -368,8 +374,17 @@ export function sessionTools(sessionId: string): ToolEvent[] {
 export const ARCHIVE_AFTER_MS = 90_000;
 export const ARCHIVE_ERROR_AFTER_MS = 5 * 60_000;
 
+/** After the guided demo, its agents leave about a minute later, one by one. */
+const DEMO_ARCHIVE_AFTER_MS = 60_000;
+
 export function isArchived(a: Agent, now: number): boolean {
   if (a.kind !== 'sub' || a.endedAt === null) return false;
+  const n = data.sessions.get(a.sessionId)?.narration;
+  if (n && a.status === 'done') {
+    // Nothing leaves while the tour is talking about it (the base would reshuffle under the camera).
+    if (!n.done) return false;
+    return now - Math.max(a.endedAt, n.at) > DEMO_ARCHIVE_AFTER_MS + (a.startedAt % 8) * 2500;
+  }
   if (a.status === 'done') return now - a.endedAt > ARCHIVE_AFTER_MS;
   if (a.status === 'error') return now - a.endedAt > ARCHIVE_ERROR_AFTER_MS;
   return false;

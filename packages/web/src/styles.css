@@ -301,7 +301,9 @@ a { color: var(--accent); }
 .demo-progress { height: 4px; background: #0f0d13; border: 1px solid var(--line); margin: 8px 0 6px; }
 .demo-progress span { display: block; height: 100%; background: var(--accent2); transition: width 0.6s steps(8); }
 .demo-title { margin: 0 0 4px; font-size: 16px; color: var(--accent2); }
-.demo-text { margin: 0; font-size: 13.5px; line-height: 1.5; min-height: 3em; }
+.demo-text { margin: 0; font-size: 13.5px; line-height: 1.5; min-height: 3em; position: relative; }
+.demo-ghost { visibility: hidden; }
+.demo-typed { position: absolute; inset: 0; }
 .demo-caret { animation: blink-border 0.8s steps(2) infinite; color: var(--accent2); }
 .demo-paused { position: absolute; top: 10px; right: 50%; transform: translateX(50%); color: var(--accent2); font-size: 11px; text-transform: uppercase; }
 .game-controls button:disabled { opacity: 0.45; cursor: default; }

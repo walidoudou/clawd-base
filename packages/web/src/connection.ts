@@ -14,6 +14,7 @@ const HIDDEN_CLOSE_MS = 20_000;
 export function connect(): () => void {
   let es: EventSource | null = null;
   let hiddenTimer: number | null = null;
+  let retryTimer: number | null = null;
 
   const open = () => {
     if (es) return;
@@ -21,11 +22,24 @@ export function connect(): () => void {
     es = src;
     useDash.getState().setConnection('connecting');
     src.onopen = () => useDash.getState().setConnection('open');
-    src.onerror = () => useDash.getState().setConnection(src.readyState === EventSource.CLOSED ? 'closed' : 'connecting');
+    src.onerror = () => {
+      if (src.readyState !== EventSource.CLOSED) return useDash.getState().setConnection('connecting');
+      // The browser gave up (e.g. a 5xx while the server restarts): retry ourselves.
+      useDash.getState().setConnection('closed');
+      if (es === src) es = null;
+      src.close();
+      if (retryTimer === null && document.visibilityState !== 'hidden')
+        retryTimer = window.setTimeout(() => {
+          retryTimer = null;
+          open();
+        }, 2000);
+    };
     src.addEventListener('snapshot', (e) => applySnapshot(JSON.parse((e as MessageEvent<string>).data) as Snapshot));
     src.addEventListener('patch', (e) => applyPatch(JSON.parse((e as MessageEvent<string>).data) as PatchBatch));
   };
   const close = () => {
+    if (retryTimer !== null) window.clearTimeout(retryTimer);
+    retryTimer = null;
     es?.close();
     es = null;
   };

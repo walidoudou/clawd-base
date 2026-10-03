@@ -181,14 +181,37 @@ export interface Session {
   narration: Narration | null;
 }
 
+/** A room (or set of rooms) the guided demo camera can frame. */
+export type FocusTarget =
+  | { kind: 'main' }
+  /** One sub-agent, by the tool_use id that spawned it. */
+  | { kind: 'agent'; toolUseId: string }
+  /** The chief's room of the session's n-th workflow (by start time). */
+  | { kind: 'workflow'; index: number }
+  /** The agents of one step of the n-th workflow (1-based); without `step`, the running (or last) step. */
+  | { kind: 'step'; index: number; step?: number }
+  /** Sub-agents launched since this narration started. */
+  | { kind: 'spawned' }
+  /** Every room of the session. */
+  | { kind: 'all' };
+
+export type NarrationFocus =
+  | { kind: 'main' }
+  | { kind: 'overview' }
+  | { kind: 'surface' }
+  | { kind: 'workflow'; index: number }
+  | { kind: 'agent'; toolUseId: string }
+  /** Frame all these rooms at once (re-evaluated as rooms appear, move or shrink). */
+  | { kind: 'group'; targets: FocusTarget[]; maxZoom?: number };
+
 export interface Narration {
   step: number;
   total: number;
   title: string;
   text: string;
   at: number;
-  /** Where the camera should look: main room, a workflow, an agent (by spawn tool_use id) or everything. */
-  focus: { kind: 'main' } | { kind: 'overview' } | { kind: 'surface' } | { kind: 'workflow'; index: number } | { kind: 'agent'; toolUseId: string } | null;
+  /** Where the camera should look while this caption is shown. */
+  focus: NarrationFocus | null;
   done: boolean;
 }
 

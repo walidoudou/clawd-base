@@ -34,7 +34,7 @@ export function Journal() {
         {!open && logs[0] ? (
           <span className="journal-last">
             {' '}
-            — {t.logKind[logs[0].kind] ?? logs[0].kind} : {logs[0].summary}
+            — {t.labelled(t.logKind[logs[0].kind] ?? logs[0].kind, logs[0].summary)}
           </span>
         ) : null}
       </button>

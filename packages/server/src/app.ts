@@ -7,6 +7,7 @@ import type { Ingest } from './ingest.ts';
 import type { SseHub } from './sse.ts';
 import type { DemoRunner } from './demo.ts';
 import { DEBUG_HTML } from './debugPage.ts';
+import { TOKEN_HEADER, tokenMatches } from './runtime.ts';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -28,6 +29,12 @@ export interface AppDeps {
   hub: SseHub;
   stats: () => Record<string, unknown>;
   demo?: DemoRunner;
+  /** This run's secret (also in <dataDir>/server.json). Hooks carrying it are trusted with disk reads. */
+  token?: string | null;
+  /** Absolute path of the running entry file, reported by /api/health (lets start.mjs spot an outdated server). */
+  bundle?: string | null;
+  /** Graceful stop, triggered by an authenticated POST /api/shutdown. */
+  shutdown?: () => void;
 }
 
 function isLocalHost(req: FastifyRequest, port: number): boolean {
@@ -50,19 +57,31 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     if (req.method !== 'GET' && !isLocalOrigin(req.headers.origin, config.port)) return reply.code(403).send('forbidden');
   });
 
-  app.get('/api/health', async () => ({ ok: true, app: APP_ID, version: config.version, pid: process.pid, port: config.port, ...deps.stats() }));
+  const trusted = (req: FastifyRequest): boolean => tokenMatches(req.headers[TOKEN_HEADER], deps.token);
+
+  app.get('/api/health', async () => ({ ok: true, app: APP_ID, version: config.version, pid: process.pid, port: config.port, bundle: deps.bundle ?? null, ...deps.stats() }));
 
   app.get('/api/config', async (): Promise<DashConfig> => ({ spriteSet: config.spriteSet, locale: config.locale, version: config.version }));
 
   app.get('/api/state', async () => store.snapshot());
 
+  // Any local account can POST here: without the token the payload is still shown, but never
+  // makes the server read a file (see Ingest.handleHook).
   app.post('/api/hook', async (req, reply) => {
     try {
-      await ingest.handleHook(req.body);
+      await ingest.handleHook(req.body, trusted(req));
     } catch {
       // Never fail the hook.
     }
     return reply.code(204).send();
+  });
+
+  /** Used by start.mjs to replace an outdated server after a plugin update. */
+  app.post('/api/shutdown', async (req, reply) => {
+    if (!deps.shutdown || !trusted(req)) return reply.code(403).send('forbidden');
+    const stop = deps.shutdown;
+    reply.raw.once('finish', () => setImmediate(stop));
+    return reply.code(202).send();
   });
 
   /** Used by the simulator to inject normalized events directly. */

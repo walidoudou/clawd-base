@@ -1,6 +1,7 @@
-import { mkdirSync } from 'node:fs';
+import { closeSync, openSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NormalizedEvent } from '@dash/shared';
+import { chmodPrivate, ensurePrivateDir } from './runtime.ts';
 
 type Statement = { run(...args: unknown[]): unknown; all(...args: unknown[]): unknown[]; iterate(...args: unknown[]): Iterable<unknown> };
 type Db = {
@@ -24,10 +25,16 @@ export class EventLog {
   static async open(dataDir: string, onError: (m: string) => void): Promise<EventLog> {
     const log = new EventLog();
     try {
-      mkdirSync(dataDir, { recursive: true });
+      ensurePrivateDir(dataDir);
+      const file = join(dataDir, 'events.db');
+      // Create it owner-only before SQLite does (its -wal/-shm files then inherit these permissions).
+      closeSync(openSync(file, 'a', 0o600));
       const mod = (await import('node:sqlite')) as unknown as { DatabaseSync: new (path: string) => Db };
-      const db = new mod.DatabaseSync(join(dataDir, 'events.db'));
+      const db = new mod.DatabaseSync(file);
+      // Wait for a lock instead of failing at once (e.g. the previous server still flushing on its way out).
+      db.exec('PRAGMA busy_timeout = 3000');
       db.exec('PRAGMA journal_mode = WAL');
+      for (const f of [file, `${file}-wal`, `${file}-shm`]) chmodPrivate(f);
       db.exec('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, at INTEGER NOT NULL, json TEXT NOT NULL)');
       db.exec('CREATE INDEX IF NOT EXISTS events_at ON events(at)');
       log.db = db;

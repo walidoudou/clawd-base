@@ -3,6 +3,7 @@ import type { Anim } from '@dash/shared';
 import { roomGeometry, type RoomGeometry, type RoomKind, type Stations } from './tiles.ts';
 import { lampTexture, mascotTexture, propTexture, releaseRoomTexture, roomTexture, sparkleTexture, zzzTexture, type PropKind } from './textures.ts';
 import { ParticleSystem } from './particles.ts';
+import { t } from '../i18n/index.ts';
 
 export interface BoardLine {
   text: string;
@@ -150,10 +151,12 @@ export class RoomView extends Container {
   private built = false;
   removing = false;
   private removeAt = 0;
+  private readonly selectable: boolean;
 
   constructor(key: string, onSelect: (() => void) | null) {
     super();
     this.key = key;
+    this.selectable = !!onSelect;
     if (onSelect) {
       this.eventMode = 'static';
       this.cursor = 'pointer';
@@ -353,7 +356,7 @@ export class RoomView extends Container {
     if (L.compactions >= 0 && info.compactions > L.compactions && g.board) {
       const b = g.board;
       this.fx.swirl(b.x + b.w / 2, b.y + b.h / 2, b.w, b.h, 36);
-      this.fx.text('compaction !', b.x + b.w / 2, b.y - 6, style(8, 0x6cc4ff, true), { vy: -10, life: 1800 });
+      this.fx.text(t.compactionFx, b.x + b.w / 2, b.y - 6, style(8, 0x6cc4ff, true), { vy: -10, life: 1800 });
     }
     let consumedTokens = false;
     if (L.tokens >= 0 && info.tokens - L.tokens >= 1500 && now - this.lastTokenFx > 700 && !info.filler) {
@@ -452,6 +455,19 @@ export class RoomView extends Container {
   }
 
   private removeStart = 0;
+
+  /** Wanted again while leaving (session switched back, agent resumed, archive toggle): cancel the exit. */
+  revive(): void {
+    if (!this.removing) return;
+    this.removing = false;
+    this.alpha = 1;
+    if (this.built) {
+      this.content.mask = null;
+      this.revealMask.clear();
+      this.revealMask.visible = false;
+    }
+    if (this.selectable) this.eventMode = 'static';
+  }
 
   /** Construction: hazard-striped scaffold drawn around the room, then a bottom → top reveal. */
   private tickBuild(age: number, dt: number): void {

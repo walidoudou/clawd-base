@@ -52,6 +52,13 @@ export const fr = {
   sessionStatus: { active: 'active', idle: 'inactive', ended: 'terminée' },
   toolStatus: { running: 'en cours', ok: 'ok', error: 'erreur' },
   op: { read: 'lecture', edit: 'édition', write: 'écriture', create: 'création' },
+  escKey: 'Échap',
+  /** "label : value" with the language's punctuation. */
+  labelled: (label: string, value: string) => `${label} : ${value}`,
+  compactionFx: 'compaction !',
+  noWebgl: 'Impossible de dessiner la base (WebGL indisponible dans ce navigateur) : affichage de la vue liste.',
+  edits: (n: number) => `${n} ${n > 1 ? 'éditions' : 'édition'}`,
+  reads: (n: number) => `${n} ${n > 1 ? 'lectures' : 'lecture'}`,
   viewGame: 'Vue base',
   viewList: 'Vue liste',
   zoomIn: 'Zoom avant',

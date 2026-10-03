@@ -31,6 +31,9 @@ export interface DetectionResult {
   assignment: Map<string, WorkflowAssignment>;
 }
 
+/** A marker workflow whose step numbers start over after this long (or in another turn) is a new run. */
+const RUN_GAP_MS = 5 * 60_000;
+
 const MARKER_RE = /\[\s*workflow\s*:\s*([^\]\s][^\]]*?)(?:\s+step\s*:\s*(\d+))?\s*\]/i;
 
 /** Parse `[workflow:<name> step:<n>]` (step optional). */
@@ -39,7 +42,8 @@ export function parseWorkflowMarker(text: string | null | undefined): { name: st
   const m = MARKER_RE.exec(text);
   if (!m) return null;
   const name = (m[1] ?? '').trim();
-  if (!name) return null;
+  // "[workflow:<name> step:<n>]" quoted in documentation is a placeholder, not a marker.
+  if (!name || /\bstep\s*:/i.test(name)) return null;
   return { name, step: m[2] ? Number(m[2]) : null };
 }
 
@@ -111,7 +115,8 @@ export function detectWorkflows(
   // 1. Markers
   const byMarker = new Map<string, { name: string; owner: string; items: Array<SpawnRecord & { step: number | null }> }>();
   for (const s of spawns) {
-    const m = parseWorkflowMarker(s.description) ?? parseWorkflowMarker(s.prompt.slice(0, 2000));
+    // Markers live in the description or open the prompt; one quoted further down is just text.
+    const m = parseWorkflowMarker(s.description) ?? parseWorkflowMarker(s.prompt.split('\n', 1)[0]?.slice(0, 500));
     if (!m) {
       remaining.push(s);
       continue;
@@ -122,34 +127,51 @@ export function detectWorkflows(
     g.items.push({ ...s, step: m.step });
   }
   for (const g of byMarker.values()) {
-    const numbered = new Map<number, SpawnRecord[]>();
-    const unnumbered: SpawnRecord[] = [];
-    for (const it of g.items) {
-      if (it.step !== null) {
-        const arr = numbered.get(it.step) ?? [];
-        arr.push(it);
-        numbered.set(it.step, arr);
-      } else unnumbered.push(it);
+    // The same workflow launched again later (steps 1, 2… then 1 again, in another turn or minutes
+    // later) is a new run, not more steps. Steps started out of order within one run stay together.
+    const runs: Array<typeof g.items> = [];
+    let maxStep = 0;
+    let last: (typeof g.items)[number] | null = null;
+    for (const it of [...g.items].sort((a, b) => a.startedAt - b.startedAt)) {
+      const again = it.step !== null && it.step < maxStep && !!last && (it.parentTurn !== last.parentTurn || it.startedAt - last.startedAt > RUN_GAP_MS);
+      if (!runs.length || again) {
+        runs.push([]);
+        maxStep = 0;
+      }
+      runs[runs.length - 1]?.push(it);
+      if (it.step !== null) maxStep = Math.max(maxStep, it.step);
+      last = it;
     }
-    const steps: WorkflowStep[] = [...numbered.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([n, items]) => ({
-        index: n,
-        agentIds: items.sort((a, b) => a.startedAt - b.startedAt).map((x) => x.agentId),
+    runs.forEach((items, run) => {
+      const numbered = new Map<number, SpawnRecord[]>();
+      const unnumbered: SpawnRecord[] = [];
+      for (const it of items) {
+        if (it.step !== null) {
+          const arr = numbered.get(it.step) ?? [];
+          arr.push(it);
+          numbered.set(it.step, arr);
+        } else unnumbered.push(it);
+      }
+      const steps: WorkflowStep[] = [...numbered.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([n, stepItems]) => ({
+          index: n,
+          agentIds: stepItems.sort((a, b) => a.startedAt - b.startedAt).map((x) => x.agentId),
+          startedAt: Math.min(...stepItems.map((x) => x.startedAt)),
+        }));
+      if (unnumbered.length) {
+        const next = steps.length ? Math.max(...steps.map((s) => s.index)) + 1 : 1;
+        steps.push(...stepsFromGroups(groupBySteps(unnumbered, clusterMs), next));
+      }
+      workflows.push({
+        id: `wf:marker:${g.owner}:${g.name.toLowerCase()}${run ? `#${run + 1}` : ''}`,
+        sessionId,
+        name: g.name,
+        ownerAgentId: g.owner,
+        source: 'marker',
+        steps,
         startedAt: Math.min(...items.map((x) => x.startedAt)),
-      }));
-    if (unnumbered.length) {
-      const next = steps.length ? Math.max(...steps.map((s) => s.index)) + 1 : 1;
-      steps.push(...stepsFromGroups(groupBySteps(unnumbered, clusterMs), next));
-    }
-    workflows.push({
-      id: `wf:marker:${g.owner}:${g.name.toLowerCase()}`,
-      sessionId,
-      name: g.name,
-      ownerAgentId: g.owner,
-      source: 'marker',
-      steps,
-      startedAt: Math.min(...g.items.map((x) => x.startedAt)),
+      });
     });
   }
 

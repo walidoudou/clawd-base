@@ -8001,7 +8001,7 @@ var require_thread_stream = __commonJS({
     var { version } = require_package();
     var { EventEmitter: EventEmitter2 } = __require("events");
     var { Worker } = __require("worker_threads");
-    var { join: join6 } = __require("path");
+    var { join: join8 } = __require("path");
     var { pathToFileURL } = __require("url");
     var { wait } = require_wait();
     var {
@@ -8052,7 +8052,7 @@ var require_thread_stream = __commonJS({
     function createWorker(stream, opts) {
       const { filename, workerData } = opts;
       const bundlerOverrides = "__bundlerPathsOverrides" in globalThis ? globalThis.__bundlerPathsOverrides : {};
-      const toExecute = bundlerOverrides["thread-stream-worker"] || join6(__dirname, "lib", "worker.js");
+      const toExecute = bundlerOverrides["thread-stream-worker"] || join8(__dirname, "lib", "worker.js");
       const worker = new Worker(toExecute, {
         ...opts.workerOpts,
         name: opts.workerOpts?.name || "thread-stream",
@@ -8518,10 +8518,10 @@ var require_transport = __commonJS({
   "node_modules/pino/lib/transport.js"(exports, module) {
     "use strict";
     var { createRequire } = __require("module");
-    var { existsSync: existsSync2 } = __require("node:fs");
+    var { existsSync: existsSync3 } = __require("node:fs");
     var getCallers = require_caller();
-    var { join: join6, isAbsolute: isAbsolute2, sep: sep2 } = __require("node:path");
-    var { fileURLToPath: fileURLToPath2 } = __require("node:url");
+    var { join: join8, isAbsolute: isAbsolute2, sep: sep2 } = __require("node:path");
+    var { fileURLToPath: fileURLToPath3 } = __require("node:url");
     var sleep = require_atomic_sleep();
     var onExit = require_on_exit_leak_free();
     var ThreadStream = require_thread_stream();
@@ -8588,12 +8588,12 @@ var require_transport = __commonJS({
       let path = unquoted;
       if (path.startsWith("file://")) {
         try {
-          path = fileURLToPath2(path);
+          path = fileURLToPath3(path);
         } catch {
           return false;
         }
       }
-      return isAbsolute2(path) && !existsSync2(path);
+      return isAbsolute2(path) && !existsSync3(path);
     }
     function stripQuotes(value) {
       const first = value[0];
@@ -8675,7 +8675,7 @@ var require_transport = __commonJS({
         throw new Error("only one of target or targets can be specified");
       }
       if (targets) {
-        target = bundlerOverrides["pino-worker"] || join6(__dirname, "worker.js");
+        target = bundlerOverrides["pino-worker"] || join8(__dirname, "worker.js");
         options.targets = targets.filter((dest) => dest.target).map((dest) => {
           return {
             ...dest,
@@ -8696,7 +8696,7 @@ var require_transport = __commonJS({
         const pipelinesHaveLevel = options.pipelines.some((p) => p.some((t) => t.level != null));
         usesMultistream = options.targets.length + options.pipelines.length > 1 || targetsHaveLevel || pipelinesHaveLevel;
       } else if (pipeline) {
-        target = bundlerOverrides["pino-worker"] || join6(__dirname, "worker.js");
+        target = bundlerOverrides["pino-worker"] || join8(__dirname, "worker.js");
         options.pipelines = [pipeline.map((dest) => {
           return {
             ...dest,
@@ -8723,7 +8723,7 @@ var require_transport = __commonJS({
           return origin;
         }
         if (origin === "pino/file") {
-          return join6(__dirname, "..", "file.js");
+          return join8(__dirname, "..", "file.js");
         }
         let fixTarget2;
         for (const filePath of callers) {
@@ -9703,7 +9703,7 @@ var require_safe_stable_stringify = __commonJS({
               return circularValue;
             }
             let res = "";
-            let join6 = ",";
+            let join8 = ",";
             const originalIndentation = indentation;
             if (Array.isArray(value)) {
               if (value.length === 0) {
@@ -9717,7 +9717,7 @@ var require_safe_stable_stringify = __commonJS({
                 indentation += spacer;
                 res += `
 ${indentation}`;
-                join6 = `,
+                join8 = `,
 ${indentation}`;
               }
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
@@ -9725,13 +9725,13 @@ ${indentation}`;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyFnReplacer(String(i), value, stack, replacer, spacer, indentation);
                 res += tmp2 !== void 0 ? tmp2 : "null";
-                res += join6;
+                res += join8;
               }
               const tmp = stringifyFnReplacer(String(i), value, stack, replacer, spacer, indentation);
               res += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res += `${join6}"... ${getItemCount(removedKeys)} not stringified"`;
+                res += `${join8}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               if (spacer !== "") {
                 res += `
@@ -9752,7 +9752,7 @@ ${originalIndentation}`;
             let separator = "";
             if (spacer !== "") {
               indentation += spacer;
-              join6 = `,
+              join8 = `,
 ${indentation}`;
               whitespace = " ";
             }
@@ -9766,13 +9766,13 @@ ${indentation}`;
               const tmp = stringifyFnReplacer(key2, value, stack, replacer, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}:${whitespace}${tmp}`;
-                separator = join6;
+                separator = join8;
               }
             }
             if (keyLength > maximumBreadth) {
               const removedKeys = keyLength - maximumBreadth;
               res += `${separator}"...":${whitespace}"${getItemCount(removedKeys)} not stringified"`;
-              separator = join6;
+              separator = join8;
             }
             if (spacer !== "" && separator.length > 1) {
               res = `
@@ -9813,7 +9813,7 @@ ${originalIndentation}`;
             }
             const originalIndentation = indentation;
             let res = "";
-            let join6 = ",";
+            let join8 = ",";
             if (Array.isArray(value)) {
               if (value.length === 0) {
                 return "[]";
@@ -9826,7 +9826,7 @@ ${originalIndentation}`;
                 indentation += spacer;
                 res += `
 ${indentation}`;
-                join6 = `,
+                join8 = `,
 ${indentation}`;
               }
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
@@ -9834,13 +9834,13 @@ ${indentation}`;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyArrayReplacer(String(i), value[i], stack, replacer, spacer, indentation);
                 res += tmp2 !== void 0 ? tmp2 : "null";
-                res += join6;
+                res += join8;
               }
               const tmp = stringifyArrayReplacer(String(i), value[i], stack, replacer, spacer, indentation);
               res += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res += `${join6}"... ${getItemCount(removedKeys)} not stringified"`;
+                res += `${join8}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               if (spacer !== "") {
                 res += `
@@ -9853,7 +9853,7 @@ ${originalIndentation}`;
             let whitespace = "";
             if (spacer !== "") {
               indentation += spacer;
-              join6 = `,
+              join8 = `,
 ${indentation}`;
               whitespace = " ";
             }
@@ -9862,7 +9862,7 @@ ${indentation}`;
               const tmp = stringifyArrayReplacer(key2, value[key2], stack, replacer, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}:${whitespace}${tmp}`;
-                separator = join6;
+                separator = join8;
               }
             }
             if (spacer !== "" && separator.length > 1) {
@@ -9920,20 +9920,20 @@ ${originalIndentation}`;
               indentation += spacer;
               let res2 = `
 ${indentation}`;
-              const join7 = `,
+              const join9 = `,
 ${indentation}`;
               const maximumValuesToStringify = Math.min(value.length, maximumBreadth);
               let i = 0;
               for (; i < maximumValuesToStringify - 1; i++) {
                 const tmp2 = stringifyIndent(String(i), value[i], stack, spacer, indentation);
                 res2 += tmp2 !== void 0 ? tmp2 : "null";
-                res2 += join7;
+                res2 += join9;
               }
               const tmp = stringifyIndent(String(i), value[i], stack, spacer, indentation);
               res2 += tmp !== void 0 ? tmp : "null";
               if (value.length - 1 > maximumBreadth) {
                 const removedKeys = value.length - maximumBreadth - 1;
-                res2 += `${join7}"... ${getItemCount(removedKeys)} not stringified"`;
+                res2 += `${join9}"... ${getItemCount(removedKeys)} not stringified"`;
               }
               res2 += `
 ${originalIndentation}`;
@@ -9949,16 +9949,16 @@ ${originalIndentation}`;
               return '"[Object]"';
             }
             indentation += spacer;
-            const join6 = `,
+            const join8 = `,
 ${indentation}`;
             let res = "";
             let separator = "";
             let maximumPropertiesToStringify = Math.min(keyLength, maximumBreadth);
             if (isTypedArrayWithEntries(value)) {
-              res += stringifyTypedArray(value, join6, maximumBreadth);
+              res += stringifyTypedArray(value, join8, maximumBreadth);
               keys = keys.slice(value.length);
               maximumPropertiesToStringify -= value.length;
-              separator = join6;
+              separator = join8;
             }
             if (deterministic) {
               keys = sort(keys, comparator);
@@ -9969,13 +9969,13 @@ ${indentation}`;
               const tmp = stringifyIndent(key2, value[key2], stack, spacer, indentation);
               if (tmp !== void 0) {
                 res += `${separator}${strEscape(key2)}: ${tmp}`;
-                separator = join6;
+                separator = join8;
               }
             }
             if (keyLength > maximumBreadth) {
               const removedKeys = keyLength - maximumBreadth;
               res += `${separator}"...": "${getItemCount(removedKeys)} not stringified"`;
-              separator = join6;
+              separator = join8;
             }
             if (separator !== "") {
               res = `
@@ -17966,49 +17966,49 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative3, options, skipNormalization) {
+    function resolveComponent(base, relative4, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse(serialize(base, options), options);
-        relative3 = parse(serialize(relative3, options), options);
+        relative4 = parse(serialize(relative4, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative3.scheme) {
-        target.scheme = relative3.scheme;
-        target.userinfo = relative3.userinfo;
-        target.host = relative3.host;
-        target.port = relative3.port;
-        target.path = removeDotSegments(relative3.path || "");
-        target.query = relative3.query;
+      if (!options.tolerant && relative4.scheme) {
+        target.scheme = relative4.scheme;
+        target.userinfo = relative4.userinfo;
+        target.host = relative4.host;
+        target.port = relative4.port;
+        target.path = removeDotSegments(relative4.path || "");
+        target.query = relative4.query;
       } else {
-        if (relative3.userinfo !== void 0 || relative3.host !== void 0 || relative3.port !== void 0) {
-          target.userinfo = relative3.userinfo;
-          target.host = relative3.host;
-          target.port = relative3.port;
-          target.path = removeDotSegments(relative3.path || "");
-          target.query = relative3.query;
+        if (relative4.userinfo !== void 0 || relative4.host !== void 0 || relative4.port !== void 0) {
+          target.userinfo = relative4.userinfo;
+          target.host = relative4.host;
+          target.port = relative4.port;
+          target.path = removeDotSegments(relative4.path || "");
+          target.query = relative4.query;
         } else {
-          if (!relative3.path) {
+          if (!relative4.path) {
             target.path = base.path;
-            if (relative3.query !== void 0) {
-              target.query = relative3.query;
+            if (relative4.query !== void 0) {
+              target.query = relative4.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative3.path[0] === "/") {
-              target.path = removeDotSegments(relative3.path);
+            if (relative4.path[0] === "/") {
+              target.path = removeDotSegments(relative4.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative3.path;
+                target.path = "/" + relative4.path;
               } else if (!base.path) {
-                target.path = relative3.path;
+                target.path = relative4.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative3.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative4.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative3.query;
+            target.query = relative4.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -18016,7 +18016,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative3.fragment;
+      target.fragment = relative4.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -23737,49 +23737,49 @@ var require_fast_uri2 = __commonJS({
         target.ipv6Zone = source.ipv6Zone;
       }
     }
-    function resolveComponent(base, relative3, options, skipNormalization) {
+    function resolveComponent(base, relative4, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse(serialize(base, options), options);
-        relative3 = parse(serialize(relative3, options), options);
+        relative4 = parse(serialize(relative4, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative3.scheme) {
-        target.scheme = relative3.scheme;
-        target.userinfo = relative3.userinfo;
-        copyHost(target, relative3);
-        target.port = relative3.port;
-        target.path = removeDotSegments(relative3.path || "");
-        target.query = relative3.query;
+      if (!options.tolerant && relative4.scheme) {
+        target.scheme = relative4.scheme;
+        target.userinfo = relative4.userinfo;
+        copyHost(target, relative4);
+        target.port = relative4.port;
+        target.path = removeDotSegments(relative4.path || "");
+        target.query = relative4.query;
       } else {
-        if (relative3.userinfo !== void 0 || relative3.host !== void 0 || relative3.port !== void 0) {
-          target.userinfo = relative3.userinfo;
-          copyHost(target, relative3);
-          target.port = relative3.port;
-          target.path = removeDotSegments(relative3.path || "");
-          target.query = relative3.query;
+        if (relative4.userinfo !== void 0 || relative4.host !== void 0 || relative4.port !== void 0) {
+          target.userinfo = relative4.userinfo;
+          copyHost(target, relative4);
+          target.port = relative4.port;
+          target.path = removeDotSegments(relative4.path || "");
+          target.query = relative4.query;
         } else {
-          if (!relative3.path) {
+          if (!relative4.path) {
             target.path = base.path;
-            if (relative3.query !== void 0) {
-              target.query = relative3.query;
+            if (relative4.query !== void 0) {
+              target.query = relative4.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative3.path[0] === "/") {
-              target.path = removeDotSegments(relative3.path);
+            if (relative4.path[0] === "/") {
+              target.path = removeDotSegments(relative4.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative3.path;
+                target.path = "/" + relative4.path;
               } else if (!base.path) {
-                target.path = relative3.path;
+                target.path = relative4.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative3.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative4.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative3.query;
+            target.query = relative4.query;
           }
           target.userinfo = base.userinfo;
           copyHost(target, base);
@@ -23787,7 +23787,7 @@ var require_fast_uri2 = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative3.fragment;
+      target.fragment = relative4.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -36988,6 +36988,9 @@ ${body}`);
   }
 });
 
+// packages/server/src/index.ts
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+
 // packages/shared/src/types.ts
 var EMPTY_USAGE = Object.freeze({ input: 0, output: 0, cacheCreate: 0, cacheRead: 0, total: 0 });
 
@@ -37599,7 +37602,8 @@ function obj(v) {
 function str2(v) {
   return typeof v === "string" ? v : null;
 }
-var NON_PROMPT_PREFIXES = ["<local-command-stdout>", "<local-command-stderr>", "<local-command-caveat>", "<system-reminder>", "<bash-stdout>", "<bash-stderr>"];
+var NON_PROMPT_PREFIXES = ["<local-command-stdout>", "<local-command-stderr>", "<local-command-caveat>", "<system-reminder>", "<bash-stdout>", "<bash-stderr>", "<bash-input>", "<command-name>", "<command-message>", "<command-args>"];
+var INTERRUPTED = "[Request interrupted by user";
 function parseTaskNotifications(text) {
   const out = [];
   const re = /<task-notification>([\s\S]*?)<\/task-notification>/g;
@@ -37627,6 +37631,7 @@ var TranscriptParser = class {
   started = false;
   lastText = null;
   lastAt = 0;
+  held = [];
   get context() {
     return this.ctx;
   }
@@ -37645,10 +37650,23 @@ var TranscriptParser = class {
     return this.parseObject(o);
   }
   parseObject(o) {
-    const sessionId = str2(o["sessionId"]) ?? this.ctx.sessionId;
     const parsed = Date.parse(str2(o["timestamp"]) ?? "");
     if (parsed) this.lastAt = parsed;
-    const at = parsed || this.lastAt || 0;
+    if (!this.lastAt) {
+      if (this.held.length < 100) this.held.push(o);
+      return [];
+    }
+    const out = [];
+    if (this.held.length) {
+      const held = this.held;
+      this.held = [];
+      for (const h of held) out.push(...this.parseAt(h, this.lastAt));
+    }
+    out.push(...this.parseAt(o, this.lastAt));
+    return out;
+  }
+  parseAt(o, at) {
+    const sessionId = str2(o["sessionId"]) ?? this.ctx.sessionId;
     const agentId = str2(o["agentId"]) ?? this.ctx.agentId ?? sessionId;
     const base = { sessionId, at, source: "transcript" };
     const out = [];
@@ -37748,7 +37766,7 @@ var TranscriptParser = class {
       }
     }
     const usage = usageFromApi(msg["usage"]);
-    if (usage && messageId && o["isApiErrorMessage"] !== true) {
+    if (usage && usage.total > 0 && model !== "<synthetic>" && messageId && o["isApiErrorMessage"] !== true) {
       out.push({ ...base, kind: "usage", agentId, messageId, model, usage });
     }
     if (msg["stop_reason"] === "end_turn") {
@@ -37760,7 +37778,7 @@ var TranscriptParser = class {
     }
   }
   parseUser(o, base, agentId, out) {
-    if (o["isMeta"] === true) return;
+    if (o["isMeta"] === true || o["isCompactSummary"] === true || o["isVisibleInTranscriptOnly"] === true) return;
     const msg = obj(o["message"]);
     if (!msg) return;
     const content = msg["content"];
@@ -37787,6 +37805,10 @@ var TranscriptParser = class {
       }
       if (origin && origin["kind"] !== void 0 && origin["kind"] !== "human") return;
       const t = promptText.trimStart();
+      if (t.startsWith(INTERRUPTED)) {
+        out.push({ ...base, kind: "turn.end", agentId, lastMessage: this.lastText });
+        return;
+      }
       if (!t || NON_PROMPT_PREFIXES.some((p) => t.startsWith(p))) return;
       out.push({ ...base, kind: "prompt", agentId, text: truncateText(promptText, 4e3), promptId: str2(o["promptId"]) });
       return;
@@ -37852,13 +37874,14 @@ function identifyTranscript(path) {
 }
 
 // packages/shared/src/workflow.ts
+var RUN_GAP_MS = 5 * 6e4;
 var MARKER_RE = /\[\s*workflow\s*:\s*([^\]\s][^\]]*?)(?:\s+step\s*:\s*(\d+))?\s*\]/i;
 function parseWorkflowMarker(text) {
   if (!text) return null;
   const m = MARKER_RE.exec(text);
   if (!m) return null;
   const name = (m[1] ?? "").trim();
-  if (!name) return null;
+  if (!name || /\bstep\s*:/i.test(name)) return null;
   return { name, step: m[2] ? Number(m[2]) : null };
 }
 function nativeWorkflowName(input) {
@@ -37902,7 +37925,7 @@ function detectWorkflows(sessionId, spawns, natives = [], opts = {}) {
   const remaining = [];
   const byMarker = /* @__PURE__ */ new Map();
   for (const s of spawns) {
-    const m = parseWorkflowMarker(s.description) ?? parseWorkflowMarker(s.prompt.slice(0, 2e3));
+    const m = parseWorkflowMarker(s.description) ?? parseWorkflowMarker(s.prompt.split("\n", 1)[0]?.slice(0, 500));
     if (!m) {
       remaining.push(s);
       continue;
@@ -37913,32 +37936,47 @@ function detectWorkflows(sessionId, spawns, natives = [], opts = {}) {
     g.items.push({ ...s, step: m.step });
   }
   for (const g of byMarker.values()) {
-    const numbered = /* @__PURE__ */ new Map();
-    const unnumbered = [];
-    for (const it of g.items) {
-      if (it.step !== null) {
-        const arr = numbered.get(it.step) ?? [];
-        arr.push(it);
-        numbered.set(it.step, arr);
-      } else unnumbered.push(it);
+    const runs = [];
+    let maxStep = 0;
+    let last = null;
+    for (const it of [...g.items].sort((a, b) => a.startedAt - b.startedAt)) {
+      const again = it.step !== null && it.step < maxStep && !!last && (it.parentTurn !== last.parentTurn || it.startedAt - last.startedAt > RUN_GAP_MS);
+      if (!runs.length || again) {
+        runs.push([]);
+        maxStep = 0;
+      }
+      runs[runs.length - 1]?.push(it);
+      if (it.step !== null) maxStep = Math.max(maxStep, it.step);
+      last = it;
     }
-    const steps = [...numbered.entries()].sort((a, b) => a[0] - b[0]).map(([n2, items]) => ({
-      index: n2,
-      agentIds: items.sort((a, b) => a.startedAt - b.startedAt).map((x) => x.agentId),
-      startedAt: Math.min(...items.map((x) => x.startedAt))
-    }));
-    if (unnumbered.length) {
-      const next = steps.length ? Math.max(...steps.map((s) => s.index)) + 1 : 1;
-      steps.push(...stepsFromGroups(groupBySteps(unnumbered, clusterMs), next));
-    }
-    workflows.push({
-      id: `wf:marker:${g.owner}:${g.name.toLowerCase()}`,
-      sessionId,
-      name: g.name,
-      ownerAgentId: g.owner,
-      source: "marker",
-      steps,
-      startedAt: Math.min(...g.items.map((x) => x.startedAt))
+    runs.forEach((items, run) => {
+      const numbered = /* @__PURE__ */ new Map();
+      const unnumbered = [];
+      for (const it of items) {
+        if (it.step !== null) {
+          const arr = numbered.get(it.step) ?? [];
+          arr.push(it);
+          numbered.set(it.step, arr);
+        } else unnumbered.push(it);
+      }
+      const steps = [...numbered.entries()].sort((a, b) => a[0] - b[0]).map(([n2, stepItems]) => ({
+        index: n2,
+        agentIds: stepItems.sort((a, b) => a.startedAt - b.startedAt).map((x) => x.agentId),
+        startedAt: Math.min(...stepItems.map((x) => x.startedAt))
+      }));
+      if (unnumbered.length) {
+        const next = steps.length ? Math.max(...steps.map((s) => s.index)) + 1 : 1;
+        steps.push(...stepsFromGroups(groupBySteps(unnumbered, clusterMs), next));
+      }
+      workflows.push({
+        id: `wf:marker:${g.owner}:${g.name.toLowerCase()}${run ? `#${run + 1}` : ""}`,
+        sessionId,
+        name: g.name,
+        ownerAgentId: g.owner,
+        source: "marker",
+        steps,
+        startedAt: Math.min(...items.map((x) => x.startedAt))
+      });
     });
   }
   const nativeById = new Map(natives.map((n2) => [n2.toolUseId, n2]));
@@ -38018,6 +38056,7 @@ function groupBySteps(items, clusterMs) {
 // packages/shared/src/store.ts
 var DIFF_RANK = { none: 0, strings: 1, snapshot: 2, structuredPatch: 3 };
 var IDLE_AFTER_MS = 10 * 60 * 1e3;
+var STALE_BUSY_MS = 60 * 60 * 1e3;
 var PROMPT_DEDUP_MS = 60 * 1e3;
 var TIMELINE_MINUTES = 180;
 var MINUTE = 6e4;
@@ -38240,7 +38279,7 @@ var StateStore = class {
         narration: null
       };
       this.sessions.set(id, s);
-      this.agents.set(id, newAgent({ id, sessionId: id, kind: "main", type: "main", description: "main" }, at));
+      this.agents.set(id, newAgent({ id, sessionId: id, kind: "main", type: "main", description: "main" }, at > 0 ? at : Date.now()));
       this.mark("agent", id);
       this.pruneSessions(id);
     }
@@ -38252,7 +38291,7 @@ var StateStore = class {
       this.mark("session", id);
       return s;
     }
-    if (at < s.startedAt) s.startedAt = at;
+    if (at > 0 && at < s.startedAt) s.startedAt = at;
     if (at > s.lastActivityAt) {
       s.lastActivityAt = at;
       if (s.status === "idle" && at > this.now() - IDLE_AFTER_MS) s.status = "active";
@@ -38263,12 +38302,13 @@ var StateStore = class {
   ensureAgent(sessionId, agentId, at) {
     let a = this.agents.get(agentId);
     if (!a) {
-      a = agentId === sessionId ? newAgent({ id: agentId, sessionId, kind: "main", type: "main", description: "main" }, at) : newAgent({ id: agentId, sessionId, kind: "sub", parentId: sessionId, status: "running" }, at);
+      const start = at > 0 ? at : Date.now();
+      a = agentId === sessionId ? newAgent({ id: agentId, sessionId, kind: "main", type: "main", description: "main" }, start) : newAgent({ id: agentId, sessionId, kind: "sub", parentId: sessionId, status: "running" }, start);
       this.agents.set(agentId, a);
       this.workflowDirty.add(sessionId);
     }
     if (at > a.lastActivityAt) a.lastActivityAt = at;
-    if (at < a.startedAt) a.startedAt = at;
+    if (at > 0 && at < a.startedAt) a.startedAt = at;
     this.mark("agent", agentId);
     return a;
   }
@@ -38411,9 +38451,14 @@ var StateStore = class {
       }
     }
     for (const a of this.agents.values()) {
-      if ((a.status === "running" || a.status === "starting") && now - a.lastActivityAt > IDLE_AFTER_MS) {
-        if (a.kind === "sub" && (a.waiting || (this.runningTools.get(a.id)?.length ?? 0) > 0)) continue;
-        a.status = a.kind === "main" ? "idle" : "done";
+      if (a.status !== "running" && a.status !== "starting") continue;
+      const session = this.sessions.get(a.sessionId);
+      const sessionOver = session?.status === "ended" && session.endedAt !== null && a.lastActivityAt <= session.endedAt;
+      if (sessionOver || now - a.lastActivityAt > IDLE_AFTER_MS) {
+        const busy = a.waiting || (this.runningTools.get(a.id)?.length ?? 0) > 0;
+        if (a.kind === "sub" && busy && !sessionOver && now - a.lastActivityAt < STALE_BUSY_MS) continue;
+        a.status = a.kind === "main" ? sessionOver ? "done" : "idle" : "done";
+        a.waiting = null;
         if (a.kind === "sub") {
           this.staleDone.add(a.id);
           if (!a.endedAt) a.endedAt = a.lastActivityAt;
@@ -38458,11 +38503,17 @@ var StateStore = class {
       case "session.end": {
         s.endedAt = ev.at;
         s.status = "ended";
-        const main2 = this.agents.get(s.id);
-        if (main2) {
-          main2.status = "done";
-          main2.currentTool = null;
-          this.mark("agent", main2.id);
+        for (const a of this.agents.values()) {
+          if (a.sessionId !== s.id) continue;
+          if (a.kind === "main" || a.status === "running" || a.status === "starting") {
+            if (a.status !== "error") a.status = "done";
+            if (a.kind === "sub") a.endedAt = a.endedAt ?? ev.at;
+            a.currentTool = null;
+            a.currentToolInputPreview = null;
+            a.waiting = null;
+            this.runningTools.delete(a.id);
+            this.mark("agent", a.id);
+          }
         }
         this.log(ev, s.title);
         break;
@@ -38487,12 +38538,15 @@ var StateStore = class {
         if (texts.size > 500) texts.delete(texts.keys().next().value);
         const a = this.ensureAgent(s.id, ev.agentId, ev.at);
         a.turns += 1;
-        a.status = "running";
-        a.waiting = null;
         if (a.kind === "main") s.lastPrompt = truncateText(ev.text, 300);
-        if (s.status === "ended") {
-          s.status = "active";
-          s.endedAt = null;
+        const stale = s.status === "ended" && s.endedAt !== null && ev.at <= s.endedAt;
+        if (!stale) {
+          a.status = "running";
+          a.waiting = null;
+          if (s.status === "ended") {
+            s.status = "active";
+            s.endedAt = null;
+          }
         }
         this.log(ev, truncateText(ev.text.replace(/\s+/g, " "), 80), a.id);
         break;
@@ -38510,6 +38564,7 @@ var StateStore = class {
         }
         a.parentId = parent.id;
         a.spawnToolUseId = ev.toolUseId;
+        if (holder && !a.parentTurn) a.parentTurn = parent.turns;
         if (ev.parentMessageId) a.parentMessageId = ev.parentMessageId;
         if (a.type === "general-purpose" || !a.type) a.type = ev.agentType;
         if (!a.description) a.description = ev.description;
@@ -38528,7 +38583,7 @@ var StateStore = class {
           a = this.agents.get(ev.agentId);
         } else if (!a) {
           const pending = [...this.agents.values()].filter((x) => x.sessionId === s.id && x.id.startsWith("t:")).sort((x, y) => x.startedAt - y.startedAt);
-          const match = pending.find((x) => !ev.agentType || x.type === ev.agentType) ?? pending[0];
+          const match = ev.agentType ? pending.find((x) => x.type === ev.agentType) ?? pending[0] : pending.length === 1 ? pending[0] : void 0;
           if (match) a = this.rekey(match.id, ev.agentId);
         }
         const known = !!a;
@@ -38710,7 +38765,7 @@ var StateStore = class {
         this.staleDone.delete(a.id);
         if (ev.lastMessage) a.lastMessage = ev.lastMessage;
         if (a.kind === "main") {
-          if (a.status !== "error") a.status = "idle";
+          if (a.status !== "error" && a.status !== "done") a.status = "idle";
         } else if (a.status !== "error") {
           a.status = "done";
           a.endedAt = a.endedAt ?? ev.at;
@@ -38847,11 +38902,13 @@ var StateStore = class {
           right.parentId = wrong.parentId;
           right.parentMessageId = wrong.parentMessageId;
           right.parentTurn = wrong.parentTurn;
-          right.description = right.description || wrong.description;
-          if (wrong.prompt.length > right.prompt.length) right.prompt = wrong.prompt;
+          if (wrong.description) right.description = wrong.description;
+          if (wrong.prompt) right.prompt = wrong.prompt;
           right.background = wrong.background;
           wrong.spawnToolUseId = null;
           wrong.parentMessageId = null;
+          wrong.description = "";
+          wrong.prompt = "";
           this.mark("agent", wrong.id);
         }
         right.spawnToolUseId = toolUseId;
@@ -39218,7 +39275,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 var APP_ID = "clawd-base";
-var VERSION = "1.0.0";
+var VERSION = "1.1.0";
 var DEFAULT_PORT = 4317;
 function env(name) {
   return process.env[`CLAWD_BASE_${name}`] ?? process.env[`CLAUDE_DASH_${name}`];
@@ -39235,7 +39292,7 @@ function findWebDir() {
   return candidates.find((c) => existsSync(join(c, "index.html"))) ?? null;
 }
 function loadConfig(argv = process.argv.slice(2)) {
-  const dataDir = arg(argv, "data-dir") ?? env("DATA_DIR") ?? process.env["CLAUDE_PLUGIN_DATA"] ?? join(homedir(), ".clawd-base");
+  const dataDir = arg(argv, "data-dir") ?? env("DATA_DIR") ?? join(homedir(), ".clawd-base");
   let file = {};
   const cfgPath = join(dataDir, "config.json");
   if (existsSync(cfgPath)) {
@@ -39250,7 +39307,7 @@ function loadConfig(argv = process.argv.slice(2)) {
   return {
     host: "127.0.0.1",
     port: Number.isFinite(port) ? port : DEFAULT_PORT,
-    projectsDir: arg(argv, "projects-dir") ?? env("PROJECTS_DIR") ?? (typeof file["projectsDir"] === "string" ? file["projectsDir"] : join(homedir(), ".claude", "projects")),
+    projectsDir: arg(argv, "projects-dir") ?? env("PROJECTS_DIR") ?? (typeof file["projectsDir"] === "string" ? file["projectsDir"] : join(process.env["CLAUDE_CONFIG_DIR"] || join(homedir(), ".claude"), "projects")),
     dataDir,
     persist: !argv.includes("--no-persist") && file["persist"] !== false,
     maxAgeHours: num3(arg(argv, "max-age-hours")) ?? num3(file["maxAgeHours"]) ?? 24,
@@ -39326,6 +39383,7 @@ var SnapshotStore = class {
 };
 
 // packages/server/src/ingest.ts
+var BACKLOG_MAX = 1e4;
 var Ingest = class {
   constructor(store, log) {
     this.store = store;
@@ -39338,6 +39396,18 @@ var Ingest = class {
   transcriptEventCount = 0;
   /** If set (env CLAWD_BASE_CAPTURE), raw hook payloads are appended to this JSONL file for debugging. */
   capturePath = env("CAPTURE") ?? null;
+  /** Persistent events received before the log is attached (it opens after listen), or null. */
+  backlog = null;
+  /** The event log opens after listen: queue persistent events until attachLog() instead of losing them. */
+  deferLog() {
+    this.backlog ??= [];
+  }
+  attachLog(log) {
+    this.log = log;
+    const queued = this.backlog;
+    this.backlog = null;
+    if (queued?.length) log?.append(queued);
+  }
   applyTranscript(events) {
     this.transcriptEventCount += events.length;
     this.store.applyAll(events);
@@ -39349,13 +39419,22 @@ var Ingest = class {
   /** Apply events that must be persisted (hooks). */
   applyPersistent(events) {
     this.store.applyAll(events);
-    this.log?.append(events);
+    if (this.backlog) {
+      if (this.backlog.length < BACKLOG_MAX) this.backlog.push(...events);
+    } else this.log?.append(events);
   }
-  /** Handle one raw hook payload. Resolves once file snapshots are captured. */
-  async handleHook(payload) {
+  /**
+   * Handle one raw hook payload. Resolves once file snapshots are captured.
+   * `trusted`: the request carried this run's token (our own hook script). Any local account can reach
+   * the endpoint, so an untrusted payload is still shown but never makes the server read a file (its
+   * tool_input.file_path could point at something only we can read): no PreToolUse snapshot, no
+   * after-read, and no access to snapshots taken for trusted calls. Its diff then comes only from what
+   * the payload itself carries (structuredPatch, originalFile, old/new strings, Write content).
+   */
+  async handleHook(payload, trusted = false) {
     this.hookCount++;
     if (this.capturePath) void appendFile(this.capturePath, `${JSON.stringify(payload)}
-`).catch(() => {
+`, { mode: 384 }).catch(() => {
     });
     const now = Date.now();
     const events = hookToEvents(payload, now);
@@ -39367,11 +39446,13 @@ var Ingest = class {
     if (toolName && toolUseId && SNAPSHOT_TOOLS.has(toolName)) {
       const path = filePathOf(input);
       if (event === "PreToolUse" && path) {
-        const content = await readCapped(path);
-        if (content !== void 0) this.snapshots.set(toolUseId, content);
+        if (trusted) {
+          const content = await readCapped(path);
+          if (content !== void 0) this.snapshots.set(toolUseId, content);
+        }
       } else if (event === "PostToolUse" && path) {
-        const before = this.snapshots.take(toolUseId);
-        const after = await readCapped(path);
+        const before = trusted ? this.snapshots.take(toolUseId) : void 0;
+        const after = trusted ? await readCapped(path) : void 0;
         const diff = resolveFileDiff({
           toolName,
           input,
@@ -39384,7 +39465,7 @@ var Ingest = class {
         if (diff && sessionId) {
           events.push({ sessionId, at: now, source: "hook", kind: "file.change", change: makeFileChange({ id: toolUseId, sessionId, agentId, at: now }, diff) });
         }
-      } else if (event === "PostToolUseFailure") {
+      } else if (event === "PostToolUseFailure" && trusted) {
         this.snapshots.delete(toolUseId);
       }
     }
@@ -39395,8 +39476,65 @@ var Ingest = class {
 };
 
 // packages/server/src/persist.ts
-import { mkdirSync } from "node:fs";
-import { join as join2 } from "node:path";
+import { closeSync, openSync } from "node:fs";
+import { join as join3 } from "node:path";
+
+// packages/server/src/runtime.ts
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { chmodSync, existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename as basename2, join as join2 } from "node:path";
+var SERVER_INFO_FILE = "server.json";
+var TOKEN_HEADER = "x-clawd-token";
+function newToken() {
+  return randomBytes(32).toString("hex");
+}
+function tokenMatches(header, token) {
+  if (!token || typeof header !== "string") return false;
+  const a = Buffer.from(header);
+  const b = Buffer.from(token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+function ensurePrivateDir(dir) {
+  const existed = existsSync2(dir);
+  mkdirSync(dir, { recursive: true, mode: 448 });
+  if (existed && basename2(dir) !== ".clawd-base") return;
+  try {
+    const st = statSync(dir);
+    if (typeof process.getuid === "function" && st.uid === process.getuid() && (st.mode & 511) !== 448) chmodSync(dir, 448);
+  } catch {
+  }
+}
+function chmodPrivate(file) {
+  try {
+    chmodSync(file, 384);
+  } catch {
+  }
+}
+function writeServerInfo(dataDir, info) {
+  const file = join2(dataDir, SERVER_INFO_FILE);
+  const tmp = `${file}.${process.pid}.tmp`;
+  const data = `${JSON.stringify(info, null, 2)}
+`;
+  rmSync(tmp, { force: true });
+  writeFileSync(tmp, data, { mode: 384, flag: "wx" });
+  try {
+    renameSync(tmp, file);
+  } catch {
+    rmSync(tmp, { force: true });
+    writeFileSync(file, data, { mode: 384 });
+    chmodPrivate(file);
+  }
+}
+function removeServerInfo(dataDir, pid = process.pid) {
+  const file = join2(dataDir, SERVER_INFO_FILE);
+  try {
+    const info = JSON.parse(readFileSync2(file, "utf8"));
+    if (info.pid === pid) unlinkSync(file);
+  } catch {
+  }
+}
+
+// packages/server/src/persist.ts
 var RETENTION_MS = 7 * 24 * 3600 * 1e3;
 var EventLog = class _EventLog {
   db = null;
@@ -39406,10 +39544,14 @@ var EventLog = class _EventLog {
   static async open(dataDir, onError) {
     const log = new _EventLog();
     try {
-      mkdirSync(dataDir, { recursive: true });
+      ensurePrivateDir(dataDir);
+      const file = join3(dataDir, "events.db");
+      closeSync(openSync(file, "a", 384));
       const mod = await import("node:sqlite");
-      const db = new mod.DatabaseSync(join2(dataDir, "events.db"));
+      const db = new mod.DatabaseSync(file);
+      db.exec("PRAGMA busy_timeout = 3000");
       db.exec("PRAGMA journal_mode = WAL");
+      for (const f of [file, `${file}-wal`, `${file}-shm`]) chmodPrivate(f);
       db.exec("CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, at INTEGER NOT NULL, json TEXT NOT NULL)");
       db.exec("CREATE INDEX IF NOT EXISTS events_at ON events(at)");
       log.db = db;
@@ -39564,7 +39706,8 @@ data: ${JSON.stringify(snap)}
 };
 
 // packages/server/src/watcher.ts
-import { open as open3, readFile, stat as stat5 } from "node:fs/promises";
+import { open as open3, readFile, readdir as readdir3, stat as stat5 } from "node:fs/promises";
+import { join as join6, relative as relative3 } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 
 // node_modules/chokidar/esm/index.js
@@ -39720,10 +39863,10 @@ var ReaddirpStream = class extends Readable {
   }
   async _formatEntry(dirent, path) {
     let entry;
-    const basename4 = this._isDirent ? dirent.name : dirent;
+    const basename5 = this._isDirent ? dirent.name : dirent;
     try {
-      const fullPath = presolve(pjoin(path, basename4));
-      entry = { path: prelative(this._root, fullPath), fullPath, basename: basename4 };
+      const fullPath = presolve(pjoin(path, basename5));
+      entry = { path: prelative(this._root, fullPath), fullPath, basename: basename5 };
       entry[this._statsProp] = this._isDirent ? dirent : await this._stat(fullPath);
     } catch (err) {
       this._onError(err);
@@ -40262,9 +40405,9 @@ var NodeFsHandler = class {
   _watchWithNodeFs(path, listener) {
     const opts = this.fsw.options;
     const directory = sysPath.dirname(path);
-    const basename4 = sysPath.basename(path);
+    const basename5 = sysPath.basename(path);
     const parent = this.fsw._getWatchedDir(directory);
-    parent.add(basename4);
+    parent.add(basename5);
     const absolutePath = sysPath.resolve(path);
     const options = {
       persistent: opts.persistent
@@ -40274,7 +40417,7 @@ var NodeFsHandler = class {
     let closer;
     if (opts.usePolling) {
       const enableBin = opts.interval !== opts.binaryInterval;
-      options.interval = enableBin && isBinaryPath(basename4) ? opts.binaryInterval : opts.interval;
+      options.interval = enableBin && isBinaryPath(basename5) ? opts.binaryInterval : opts.interval;
       closer = setFsWatchFileListener(path, absolutePath, options, {
         listener,
         rawEmitter: this.fsw._emitRaw
@@ -40297,10 +40440,10 @@ var NodeFsHandler = class {
       return;
     }
     const dirname4 = sysPath.dirname(file);
-    const basename4 = sysPath.basename(file);
+    const basename5 = sysPath.basename(file);
     const parent = this.fsw._getWatchedDir(dirname4);
     let prevStats = stats;
-    if (parent.has(basename4))
+    if (parent.has(basename5))
       return;
     const listener = async (path, newStats) => {
       if (!this.fsw._throttle(THROTTLE_MODE_WATCH, file, 5))
@@ -40325,9 +40468,9 @@ var NodeFsHandler = class {
             prevStats = newStats2;
           }
         } catch (error) {
-          this.fsw._remove(dirname4, basename4);
+          this.fsw._remove(dirname4, basename5);
         }
-      } else if (parent.has(basename4)) {
+      } else if (parent.has(basename5)) {
         const at = newStats.atimeMs;
         const mt = newStats.mtimeMs;
         if (!at || at <= mt || mt !== prevStats.mtimeMs) {
@@ -40574,11 +40717,11 @@ function createPattern(matcher) {
       if (matcher.path === string)
         return true;
       if (matcher.recursive) {
-        const relative3 = sysPath2.relative(matcher.path, string);
-        if (!relative3) {
+        const relative4 = sysPath2.relative(matcher.path, string);
+        if (!relative4) {
           return false;
         }
-        return !relative3.startsWith("..") && !sysPath2.isAbsolute(relative3);
+        return !relative4.startsWith("..") && !sysPath2.isAbsolute(relative4);
       }
       return false;
     };
@@ -41259,13 +41402,32 @@ function watch(paths, options = {}) {
 
 // packages/server/src/watcher.ts
 var CHUNK = 1024 * 1024;
+var DEPTH = 4;
+var SKIPPED_DIRS = /(^|\/)(tool-results|memory|tasks|file-history)(\/|$)/;
+var isTranscriptName = (p) => p.endsWith(".jsonl") || p.endsWith(".meta.json");
+var KIND_ORDER = { main: 0, meta: 1, subagent: 2 };
+async function pool(items, limit, fn) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+async function isDir(path) {
+  try {
+    return (await stat5(path)).isDirectory();
+  } catch {
+    return false;
+  }
+}
 var TranscriptWatcher = class {
   constructor(projectsDir, maxAgeMs, emit, onError = () => {
-  }) {
+  }, opts = {}) {
     this.projectsDir = projectsDir;
     this.maxAgeMs = maxAgeMs;
     this.emit = emit;
     this.onError = onError;
+    this.opts = { missingPollMs: 3e3, rescanMs: 15e3, concurrency: 8, ...opts };
   }
   projectsDir;
   maxAgeMs;
@@ -41275,43 +41437,147 @@ var TranscriptWatcher = class {
   files = /* @__PURE__ */ new Map();
   metaSeen = /* @__PURE__ */ new Map();
   poll = null;
+  rescanTimer = null;
+  waitTimer = null;
+  /** Resolves a pending wait for chokidar's 'ready' when stop() comes first. */
+  wake = null;
   ready = false;
-  /** Resolves after the initial scan has been read. */
+  stopped = false;
+  rescanning = false;
+  /** startup − maxAgeMs: files last modified before this are dormant. */
+  dormantBefore = 0;
+  opts;
+  /** Resolves after the initial scan has been read, or at once if projectsDir does not exist yet. */
   async start() {
-    const initial = [];
-    this.watcher = watch(this.projectsDir, {
+    this.dormantBefore = Date.now() - this.maxAgeMs;
+    if (await isDir(this.projectsDir)) return this.watch();
+    this.onError(`${this.projectsDir} introuvable \u2014 en attente de sa cr\xE9ation`);
+    this.waitTimer = setInterval(() => {
+      void isDir(this.projectsDir).then((ok) => {
+        if (!ok || !this.waitTimer) return;
+        clearInterval(this.waitTimer);
+        this.waitTimer = null;
+        this.watch().catch((e) => this.onError(`watcher: ${String(e)}`));
+      });
+    }, this.opts.missingPollMs);
+  }
+  async watch() {
+    if (this.stopped) return;
+    const initial = /* @__PURE__ */ new Set();
+    let collecting = true;
+    const watcher = watch(this.projectsDir, {
       ignoreInitial: false,
-      depth: 4,
+      depth: DEPTH,
       persistent: true,
-      ignored: (path, stats) => {
-        if (/\/(tool-results|memory|tasks|file-history)(\/|$)/.test(path)) return true;
-        if (stats?.isFile()) return !(path.endsWith(".jsonl") || path.endsWith(".meta.json"));
-        return false;
-      }
+      ignored: (path, stats) => this.skip(path, stats)
     });
-    this.watcher.on("add", (path, st) => {
-      if (!this.ready) {
-        const mtime = st?.mtimeMs ?? 0;
-        if (Date.now() - mtime > this.maxAgeMs) return;
-        initial.push(this.handle(path));
-      } else this.safeHandle(path);
+    this.watcher = watcher;
+    watcher.on("add", (path, st) => {
+      if (!collecting) return this.safeHandle(path);
+      if ((st?.mtimeMs ?? 0) < this.dormantBefore) return;
+      initial.add(path);
     });
-    this.watcher.on("change", (path) => this.safeHandle(path));
-    this.watcher.on("error", (e) => this.onError(`watcher: ${String(e)}`));
-    await new Promise((res) => this.watcher?.once("ready", () => res()));
-    await Promise.allSettled(initial);
+    watcher.on("change", (path) => {
+      if (this.ready || !initial.has(path)) this.safeHandle(path);
+    });
+    watcher.on("error", (e) => this.onError(`watcher: ${String(e)}`));
+    await new Promise((res) => {
+      this.wake = res;
+      watcher.once("ready", () => res());
+    });
+    this.wake = null;
+    collecting = false;
+    if (this.stopped) return;
+    await this.load([...initial]);
     this.ready = true;
+    initial.clear();
+    if (this.stopped) return;
     this.poll = setInterval(() => {
       const now = Date.now();
       for (const [path, st] of this.files) if (now - st.lastChangeAt < 10 * 60 * 1e3) this.safeHandle(path);
     }, 2e3);
+    this.rescanTimer = setInterval(() => void this.rescan(), this.opts.rescanMs);
   }
   async stop() {
+    this.stopped = true;
+    this.wake?.();
+    if (this.waitTimer) clearInterval(this.waitTimer);
+    this.waitTimer = null;
     if (this.poll) clearInterval(this.poll);
+    if (this.rescanTimer) clearInterval(this.rescanTimer);
     await this.watcher?.close();
+  }
+  /**
+   * Adopt transcripts that are neither tracked nor dormant any more: a dormant file modified again
+   * (resumed session), or a new file whose `add` event was missed. Sequential readdir, a few stats at a
+   * time, nothing kept between runs: cheap even with thousands of files. Runs every `rescanMs`.
+   */
+  async rescan() {
+    if (this.rescanning || this.stopped) return;
+    this.rescanning = true;
+    try {
+      const found = [];
+      const walk = async (dir, level) => {
+        let entries;
+        try {
+          entries = await readdir3(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        const candidates = [];
+        for (const e of entries) {
+          const path = join6(dir, e.name);
+          if (e.isDirectory()) {
+            if (level < DEPTH && !SKIPPED_DIRS.test(this.rel(path))) await walk(path, level + 1);
+          } else if (e.isFile() && isTranscriptName(e.name) && !this.files.has(path) && !this.metaSeen.has(path) && identifyTranscript(path)) {
+            candidates.push(path);
+          }
+        }
+        await pool(candidates, this.opts.concurrency, async (path) => {
+          const st = await stat5(path).catch(() => null);
+          if (st && st.mtimeMs >= this.dormantBefore) found.push(path);
+        });
+      };
+      await walk(this.projectsDir, 0);
+      if (this.stopped || !found.length) return;
+      await this.load(found);
+      if (!this.stopped) for (const path of found) this.watcher?.add(path);
+    } finally {
+      this.rescanning = false;
+    }
   }
   get trackedFiles() {
     return this.files.size;
+  }
+  /** projectsDir-relative path with '/' separators (a projects dir under e.g. /x/tasks/ must still work). */
+  rel(path) {
+    return relative3(this.projectsDir, path).replace(/\\/g, "/");
+  }
+  /**
+   * chokidar `ignored`: other sub-trees, non-transcript files, and dormant transcripts. Monotonic for a
+   * given file (mtime only grows): once modified after startup − maxAge it is never skipped again, so
+   * chokidar never drops a file it already watches.
+   */
+  skip(path, stats) {
+    if (SKIPPED_DIRS.test(this.rel(path))) return true;
+    if (!stats?.isFile()) return false;
+    if (!isTranscriptName(path)) return true;
+    return stats.mtimeMs < this.dormantBefore;
+  }
+  /**
+   * Read files in a deterministic order: main transcripts first, then meta, then sub-agents (the
+   * reducer must know the Agent call before the meta that links a sub-agent to it). Each kind is
+   * finished before the next starts; a few reads at a time to spare file descriptors.
+   */
+  async load(paths) {
+    const groups = [[], [], []];
+    for (const path of paths.sort()) {
+      const id = identifyTranscript(path);
+      if (id) groups[KIND_ORDER[id.kind]]?.push(path);
+    }
+    for (const group of groups) {
+      await pool(group, this.opts.concurrency, (path) => this.handle(path).catch((e) => this.onError(`watch ${path}: ${String(e)}`)));
+    }
   }
   /** Fire-and-forget wrapper: a failing file must never produce an unhandled rejection. */
   safeHandle(path) {
@@ -41414,7 +41680,7 @@ var TranscriptWatcher = class {
 // packages/server/src/app.ts
 var import_fastify = __toESM(require_fastify(), 1);
 import { readFile as readFile2, stat as stat6 } from "node:fs/promises";
-import { extname as extname2, join as join5, normalize as normalize2, sep } from "node:path";
+import { extname as extname2, join as join7, normalize as normalize2, sep } from "node:path";
 
 // packages/server/src/debugPage.ts
 var DEBUG_HTML = `<!doctype html>
@@ -41475,15 +41741,22 @@ function buildApp(deps) {
     if (!isLocalHost(req, config.port)) return reply.code(403).send("forbidden");
     if (req.method !== "GET" && !isLocalOrigin(req.headers.origin, config.port)) return reply.code(403).send("forbidden");
   });
-  app.get("/api/health", async () => ({ ok: true, app: APP_ID, version: config.version, pid: process.pid, port: config.port, ...deps.stats() }));
+  const trusted = (req) => tokenMatches(req.headers[TOKEN_HEADER], deps.token);
+  app.get("/api/health", async () => ({ ok: true, app: APP_ID, version: config.version, pid: process.pid, port: config.port, bundle: deps.bundle ?? null, ...deps.stats() }));
   app.get("/api/config", async () => ({ spriteSet: config.spriteSet, locale: config.locale, version: config.version }));
   app.get("/api/state", async () => store.snapshot());
   app.post("/api/hook", async (req, reply) => {
     try {
-      await ingest.handleHook(req.body);
+      await ingest.handleHook(req.body, trusted(req));
     } catch {
     }
     return reply.code(204).send();
+  });
+  app.post("/api/shutdown", async (req, reply) => {
+    if (!deps.shutdown || !trusted(req)) return reply.code(403).send("forbidden");
+    const stop = deps.shutdown;
+    reply.raw.once("finish", () => setImmediate(stop));
+    return reply.code(202).send();
   });
   app.post("/api/events", async (req, reply) => {
     const body = req.body;
@@ -41524,13 +41797,13 @@ function buildApp(deps) {
     }
     const url = req.params["*"] || "index.html";
     const safe = normalize2(decodeURIComponent(url.split("?")[0] ?? "")).replace(/^(\.\.(\/|\\|$))+/, "");
-    let file = join5(config.webDir, safe);
+    let file = join7(config.webDir, safe);
     if (!file.startsWith(config.webDir + sep) && file !== config.webDir) return reply.code(404).send();
     try {
       const st = await stat6(file);
-      if (st.isDirectory()) file = join5(file, "index.html");
+      if (st.isDirectory()) file = join7(file, "index.html");
     } catch {
-      file = join5(config.webDir, "index.html");
+      file = join7(config.webDir, "index.html");
     }
     try {
       const data = await readFile2(file);
@@ -41578,15 +41851,24 @@ var Sim = class {
   msg = 0;
   /** Main thread context, grows with the session (for the gauge and the compaction). */
   context = 18e3;
+  /** Demo time slept so far (ms, unaffected by speed and pauses): paces the narration. */
+  demoTime = 0;
   async sleep(ms) {
     let left = ms;
     while (left > 0) {
       if (this.ctl.aborted) throw new DemoAborted();
       const step = Math.min(100, left);
       await new Promise((r) => setTimeout(r, step / Math.max(0.1, this.ctl.speed)));
-      if (!this.ctl.paused) left -= step;
+      if (!this.ctl.paused) {
+        left -= step;
+        this.demoTime += step;
+      }
     }
     if (this.ctl.aborted) throw new DemoAborted();
+  }
+  /** Demo time elapsed (ms), the clock the narration is paced on. */
+  get clock() {
+    return this.demoTime;
   }
   base(agentId, agentType = "sim") {
     return {
@@ -41742,26 +42024,27 @@ var TEXT = {
     cwd: "/home/dev/projets/boutique-en-ligne",
     title: "D\xE9mo guid\xE9e \u2014 refonte du paiement",
     steps: [
-      ["Une nouvelle session d\xE9marre", "Claude Code vient d\u2019\xEAtre lanc\xE9 dans le projet \xAB boutique-en-ligne \xBB. La base creuse la salle de la session principale et sa mascotte s\u2019installe (une taupe mineuse par d\xE9faut, Clawd en option)."],
-      ["Le prompt de l\u2019utilisateur", "L\u2019utilisateur demande une refonte du module de paiement. Le prompt s\u2019affiche sur le tableau, la mascotte se met au travail et la jauge de contexte se remplit."],
-      ["Claude planifie", "Claude \xE9crit sa todo-list. La t\xE2che en cours appara\xEEt sur le tableau (\u2610 0/5), la liste compl\xE8te est dans le panneau de l\u2019agent : cliquez sur la salle pour l\u2019ouvrir."],
-      ["Lecture du code", "Pour lire, la mascotte va \xE0 l\u2019\xE9tag\xE8re avec un parchemin. Chaque fichier lu appara\xEEt en bleu (R) sur le tableau."],
-      ["Premi\xE8re modification", "Pour \xE9diter, elle passe au bureau : elle tape au clavier et les lignes ajout\xE9es ou supprim\xE9es s\u2019envolent. Le diff exact, avec ses num\xE9ros de ligne, est dans l\u2019onglet Fichiers."],
-      ["Les tests \xE9chouent", "La mascotte lance les tests au terminal\u2026 qui \xE9chouent. La salle tremble, des \xE9tincelles jaillissent et une notification d\u2019erreur appara\xEEt : rien n\u2019est cach\xE9."],
-      ["Claude demande la permission", "Claude veut ex\xE9cuter une commande sensible et attend votre accord : point d\u2019interrogation au-dessus de la mascotte, lampe ambre et \u26A0 dans le titre de l\u2019onglet."],
-      ["Correction et succ\xE8s", "Accord donn\xE9 : la mascotte corrige l\u2019arrondi, relance les tests, qui passent, et la todo-list avance."],
-      ["Trois agents en parall\xE8le", "Claude d\xE9l\xE8gue : trois sous-agents Explore sont lanc\xE9s dans le m\xEAme message. Chaque salle est creus\xE9e en direct et chaque mascotte est unique, g\xE9n\xE9r\xE9e \xE0 partir de l\u2019identifiant de l\u2019agent."],
-      ["Les explorateurs travaillent", "Ils lisent en parall\xE8le, l\u2019ascenseur suit l\u2019\xE9tage actif. Quand un agent termine, il c\xE9l\xE8bre sous les confettis puis s\u2019endort : sa salle s\u2019\xE9teint et se compacte."],
-      ["\xC9tape 2 : un workflow appara\xEEt", "Un deuxi\xE8me lot d\u2019agents dans le m\xEAme tour, et c\u2019est d\xE9sormais un workflow. La salle du chef (couronne ou toque) est construite, et des c\xE2bles s\u2019illuminent vers l\u2019\xE9tape active."],
+      ["Une nouvelle session d\xE9marre", "Claude Code d\xE9marre dans le projet \xAB boutique-en-ligne \xBB. La base creuse la salle principale et sa mascotte s\u2019installe (une taupe, ou Clawd en option)."],
+      ["Le prompt de l\u2019utilisateur", "L\u2019utilisateur demande une refonte du paiement. Le prompt s\u2019affiche sur le tableau et la jauge de contexte commence \xE0 se remplir."],
+      ["Claude planifie", "Claude \xE9crit sa todo-list : la t\xE2che en cours s\u2019affiche sur le tableau (\u2610 0/5). Cliquez sur une salle pour voir la liste compl\xE8te."],
+      ["Lecture du code", "Pour lire, la mascotte va \xE0 l\u2019\xE9tag\xE8re, un parchemin \xE0 la main. Chaque fichier lu s\u2019affiche en bleu (R) sur le tableau."],
+      ["Premi\xE8re modification", "Pour \xE9diter, elle tape au bureau et les lignes ajout\xE9es ou supprim\xE9es s\u2019envolent. Le diff exact est dans la vue Fichiers."],
+      ["Les tests \xE9chouent", "Elle lance les tests au terminal\u2026 \xE9chec ! La salle tremble, des \xE9tincelles jaillissent et une notification d\u2019erreur appara\xEEt."],
+      ["Claude demande la permission", "Claude attend votre accord pour lancer une commande : point d\u2019interrogation au-dessus de la mascotte, lampe ambre et \u26A0 dans l\u2019onglet."],
+      ["Correction et succ\xE8s", "Accord donn\xE9 : la mascotte corrige l\u2019arrondi et relance les tests, qui passent cette fois. La todo-list avance."],
+      ["Trois agents en parall\xE8le", "Claude d\xE9l\xE8gue \xE0 trois sous-agents Explore. Leurs salles sont creus\xE9es en direct ; chaque mascotte est unique, tir\xE9e de l\u2019identifiant de l\u2019agent."],
+      ["Les explorateurs travaillent", "Ils lisent en parall\xE8le. Un agent qui a fini fait la f\xEAte sous les confettis, puis s\u2019endort : sa salle s\u2019\xE9teint et r\xE9tr\xE9cit."],
+      ["\xC9tape 2 : un workflow appara\xEEt", "Un deuxi\xE8me lot d\u2019agents dans le m\xEAme tour forme un workflow : la salle du chef appara\xEEt et ses c\xE2bles s\u2019allument vers l\u2019\xE9tape en cours."],
       ["Un agent d\xE9l\xE8gue \xE0 son tour", "Un sous-agent peut lancer ses propres agents : un c\xE2ble violet en pointill\xE9s relie le parent \xE0 l\u2019enfant."],
-      ["\xC9tape 3 : relecture", "Derni\xE8re \xE9tape : un agent Plan relit l\u2019ensemble. Sur son tableau, le chef suit la progression des \xE9tapes (\u25A0 termin\xE9e, \u25B6 en cours)."],
-      ["Le contexte se compacte", "La jauge de contexte approche de la limite. Claude compacte la conversation : un tourbillon aspire les vieux messages et la jauge redescend."],
-      ["Un agent plante", "Un agent charg\xE9 de la migration rencontre une erreur fatale : salle secou\xE9e, alarme rouge, notification. Il reste visible pour l\u2019analyse."],
-      ["Workflow explicite", "Avec la convention [workflow:nom step:n], on regroupe explicitement des agents. Voici l\u2019audit de s\xE9curit\xE9 en deux \xE9tapes : quatre audits en parall\xE8le, puis correctifs et rapport."],
-      ["R\xE9ponse en streaming", "Avec le streaming activ\xE9 (CLAWD_BASE_STREAM=1), la r\xE9ponse s\u2019\xE9crit en direct dans une bulle au-dessus de la mascotte et dans son panneau."],
-      ["Fin de session", "Session termin\xE9e : feu d\u2019artifice au-dessus de la base ! Explorez maintenant la Chronologie (touche 3) et les Fichiers (touche 4) pour revoir tout ce qui s\u2019est pass\xE9."]
+      ["\xC9tape 3 : relecture", "Derni\xE8re \xE9tape : un agent Plan relit le tout. Sur son tableau, le chef suit les \xE9tapes (\u25A0 termin\xE9e, \u25B6 en cours)."],
+      ["Le contexte se compacte", "La jauge de contexte approche de la limite : Claude compacte la conversation, un tourbillon passe et la jauge redescend."],
+      ["Un agent plante", "L\u2019agent charg\xE9 de la migration rencontre une erreur fatale : salle secou\xE9e, alarme rouge, notification. Il reste visible pour l\u2019analyse."],
+      ["Workflow explicite", "Le marqueur [workflow:nom step:n] regroupe des agents \xE0 la main. Ici, un audit en deux \xE9tapes : quatre audits en parall\xE8le, puis correctifs et rapport."],
+      ["R\xE9ponse en streaming", "Avec CLAWD_BASE_STREAM=1, la r\xE9ponse s\u2019\xE9crit en direct dans une bulle au-dessus de la mascotte et dans son panneau."],
+      ["Fin de session", "Session termin\xE9e : feu d\u2019artifice ! Revoyez tout dans la Chronologie (touche 3) et les Fichiers (touche 4)."]
     ],
-    end: ["Fin de la d\xE9mo", "Merci d\u2019avoir suivi la visite ! Dans une minute, les agents termin\xE9s quitteront la base un par un (la mascotte sort, la salle est rebouch\xE9e) ; le bouton \xAB Archiv\xE9s \xBB les r\xE9affiche. Relancez la visite avec \u25B6 D\xE9mo."],
+    end: ["Fin de la d\xE9mo", "Merci d\u2019avoir suivi la visite ! D\u2019ici une minute, les agents termin\xE9s quitteront la base un par un (le bouton \xAB Archiv\xE9s \xBB les r\xE9affiche). Relancez avec \u25B6 D\xE9mo."],
+    stopped: ["D\xE9mo arr\xEAt\xE9e", "La visite est interrompue. Relancez-la quand vous voulez avec \u25B6 D\xE9mo."],
     prompt: "Refactorise le module de paiement, ajoute des tests et audite la s\xE9curit\xE9 du checkout.",
     plan: ["Lire le module de paiement", "Corriger les arrondis", "Explorer et tester en parall\xE8le", "Auditer la s\xE9curit\xE9", "R\xE9diger le bilan"],
     task: "Refonte du paiement",
@@ -41796,26 +42079,27 @@ var TEXT = {
     cwd: "/home/dev/projects/online-shop",
     title: "Guided demo \u2014 payment refactor",
     steps: [
-      ["A new session starts", "Claude Code was just launched in the \u201Conline-shop\u201D project. The base digs the main session\u2019s room and its mascot moves in (a miner mole by default, Clawd optionally)."],
-      ["The user\u2019s prompt", "The user asks for a payment module refactor. The prompt shows on the board, the mascot gets to work and the context gauge fills up."],
-      ["Claude plans", "Claude writes its todo list. The current task shows on the board (\u2610 0/5); the full list is in the agent panel: click the room to open it."],
+      ["A new session starts", "Claude Code starts in the \u201Conline-shop\u201D project. The base digs the main room and its mascot moves in (a mole, or Clawd optionally)."],
+      ["The user\u2019s prompt", "The user asks for a payment refactor. The prompt shows on the board and the context gauge starts filling up."],
+      ["Claude plans", "Claude writes its todo list: the current task shows on the board (\u2610 0/5). Click a room to see the full list."],
       ["Reading code", "To read, the mascot walks to the bookshelf with a scroll. Every file read shows in blue (R) on the board."],
-      ["First edit", "To edit, it goes to the desk: it types and the added/removed lines fly away. The exact diff, with line numbers, is in the Files view."],
-      ["Tests fail", "The mascot runs the tests at the terminal\u2026 and they fail. The room shakes, sparks fly and an error toast pops up: nothing is hidden."],
-      ["Claude asks for permission", "Claude wants to run a sensitive command and waits for your approval: a question mark above the mascot, an amber lamp and \u26A0 in the tab title."],
-      ["Fix and success", "Approved: the mascot fixes the rounding, re-runs the tests, which pass, and the todo list moves on."],
-      ["Three agents in parallel", "Claude delegates: three Explore sub-agents are launched in the same message. Each room is dug live and every mascot is unique, generated from the agent id."],
-      ["The explorers at work", "They read in parallel; the elevator follows the active level. When an agent finishes it celebrates under confetti, then falls asleep: its room dims and compacts."],
-      ["Step 2: a workflow appears", "A second batch of agents in the same turn makes it a workflow. The chief\u2019s room (crown or chef hat) is built and cables light up towards the active step."],
+      ["First edit", "To edit, it types at the desk and the added or removed lines fly away. The exact diff is in the Files view."],
+      ["Tests fail", "It runs the tests at the terminal\u2026 failure! The room shakes, sparks fly and an error toast pops up."],
+      ["Claude asks for permission", "Claude waits for your approval to run a command: a question mark above the mascot, an amber lamp and \u26A0 in the tab title."],
+      ["Fix and success", "Approved: the mascot fixes the rounding and re-runs the tests, which pass this time. The todo list moves on."],
+      ["Three agents in parallel", "Claude delegates to three Explore sub-agents. Their rooms are dug live; every mascot is unique, generated from the agent id."],
+      ["The explorers at work", "They read in parallel. An agent that finishes celebrates under confetti, then falls asleep: its room dims and shrinks."],
+      ["Step 2: a workflow appears", "A second batch of agents in the same turn makes a workflow: the chief\u2019s room appears and its cables light up towards the running step."],
       ["An agent delegates too", "A sub-agent can launch its own agents: a purple dotted cable links the parent to the child."],
       ["Step 3: review", "Last step: a Plan agent reviews everything. On its board, the chief tracks the steps (\u25A0 done, \u25B6 running)."],
-      ["Context compaction", "The context gauge nears the limit. Claude compacts the conversation: a whirlwind sucks old messages away and the gauge drops."],
-      ["An agent crashes", "An agent running a migration hits a fatal error: shaking room, red alarm, toast. It stays visible for analysis."],
-      ["Explicit workflow", "With the [workflow:name step:n] convention you group agents explicitly. Here is a two-step security audit: four parallel audits, then fixes and a report."],
-      ["Streaming answer", "With streaming enabled (CLAWD_BASE_STREAM=1), the answer is written live in a bubble above the mascot and in its panel."],
-      ["Session over", "Session ended: fireworks above the base! Now explore the Timeline (key 3) and Files (key 4) to replay everything that happened."]
+      ["Context compaction", "The context gauge nears the limit: Claude compacts the conversation, a whirlwind passes and the gauge drops."],
+      ["An agent crashes", "The agent running the migration hits a fatal error: shaking room, red alarm, toast. It stays visible for analysis."],
+      ["Explicit workflow", "The [workflow:name step:n] marker groups agents by hand. Here, a two-step audit: four parallel audits, then fixes and a report."],
+      ["Streaming answer", "With CLAWD_BASE_STREAM=1, the answer is written live in a bubble above the mascot and in its panel."],
+      ["Session over", "Session ended: fireworks! Replay everything in the Timeline (key 3) and Files (key 4) views."]
     ],
-    end: ["End of the demo", "Thanks for taking the tour! In a minute, finished agents will leave the base one by one (the mascot walks out, the room is filled in); the \u201CArchived\u201D button shows them again. Replay with \u25B6 Demo."],
+    end: ["End of the demo", "Thanks for taking the tour! Within a minute, finished agents will leave the base one by one (the \u201CArchived\u201D button shows them again). Replay with \u25B6 Demo."],
+    stopped: ["Demo stopped", "The tour was interrupted. Replay it any time with \u25B6 Demo."],
     prompt: "Refactor the payment module, add tests and audit the checkout security.",
     plan: ["Read the payment module", "Fix rounding errors", "Explore and test in parallel", "Audit security", "Write the summary"],
     task: "Payment refactor",
@@ -41847,127 +42131,177 @@ var TEXT = {
     workFailed: "Failed: the migration crashed"
   }
 };
+var LEAD_MS = 1100;
+function readingTime(text) {
+  return 1500 + text.length * 50;
+}
 async function runGuidedDemo(t, ctl, onSession, locale = "fr") {
   const L = TEXT[locale] ?? TEXT.fr;
   const s = new Sim(t, ctl, "sim-demo", L.cwd, { done: L.workDone, failed: L.workFailed });
   onSession?.(s.sessionId);
+  try {
+    await tour(s, L);
+  } catch (e) {
+    if (e instanceof DemoAborted) await s.narrate(0, DEMO_STEPS, L.stopped[0], L.stopped[1], null, true).catch(() => {
+    });
+    throw e;
+  }
+  return s.sessionId;
+}
+async function tour(s, L) {
   const N = DEMO_STEPS;
   const { opus, sonnet, haiku } = MODELS;
-  const pause = (ms = 2500) => s.sleep(ms);
-  const say = (step, focus) => {
-    const [title, text] = L.steps[step - 1];
-    return s.narrate(step, N, title, text, focus);
-  };
+  const group = (...targets) => ({ kind: "group", targets });
+  const main2 = { kind: "main" };
   const plan = L.plan.map((p, i) => [p, i === 0 ? "in_progress" : "pending"]);
   const mark = (i, st) => {
     plan[i] = [L.plan[i], st];
   };
-  await say(1, { kind: "main" });
-  await s.hook("SessionStart", null, { source: "startup", model: opus });
-  await s.events([{ kind: "session.title", sessionId: s.sessionId, at: Date.now(), source: "sim", title: L.title, priority: 3 }]);
-  await pause(5e3);
-  await say(2, { kind: "main" });
-  await s.hook("UserPromptSubmit", null, { prompt: L.prompt, prompt_id: randomUUID(), source: "user" });
-  await s.sleep(1200);
-  await s.usage(null, opus);
-  await pause(3500);
-  await say(3, { kind: "main" });
-  await s.todos(null, plan);
-  await s.hook("TaskCreated", null, { task_id: "demo-task", task_subject: L.task });
-  await pause(4500);
-  await say(4, { kind: "main" });
-  await s.read(null, "src/payment/stripe.ts");
-  await s.usage(null, opus);
-  await s.read(null, "src/lib/money.ts");
-  await s.toolCall(null, "Grep", { pattern: "chargeCard", path: L.cwd }, { ms: 1500 });
-  await s.usage(null, opus);
-  await pause(1500);
-  await say(5, { kind: "main" });
-  mark(0, "completed");
-  mark(1, "in_progress");
-  await s.todos(null, plan);
-  await s.edit(null, "src/payment/stripe.ts", "big");
-  await s.usage(null, opus);
-  await pause(2500);
-  await say(6, { kind: "main" });
-  await s.bash(null, "npm test -- payment", "FAIL tests/payment.test.ts \u2014 expected 1999 to be 2000");
-  await s.usage(null, opus);
-  await pause(4e3);
-  await say(7, { kind: "main" });
-  await s.hook("Notification", null, { notification_type: "permission_prompt", message: L.permission });
-  await pause(6500);
-  await say(8, { kind: "main" });
-  await s.edit(null, "src/lib/money.ts");
-  await s.bash(null, "npm test -- payment");
-  await s.usage(null, opus);
-  mark(1, "completed");
-  mark(2, "in_progress");
-  await s.todos(null, plan);
-  await pause(2500);
-  await say(9, { kind: "overview" });
-  const step1 = await Promise.all(L.explorers.map(([d, p]) => s.spawn(null, "Explore", d, p, haiku)));
-  await pause(3e3);
-  await say(10, { kind: "overview" });
-  await Promise.all(step1.map((a, i) => s.work(a.agentId, haiku, { reads: 2 + i, done: L.reportDone })));
-  await s.usage(null, opus);
-  await pause(3e3);
-  await say(11, { kind: "workflow", index: 0 });
-  const step2 = await Promise.all(L.implementers.map(([d, p]) => s.spawn(null, "general-purpose", d, p, sonnet)));
-  await pause(2500);
-  await say(12, { kind: "agent", toolUseId: step2[0]?.toolUseId ?? "" });
-  const nested = await s.spawn(step2[0]?.agentId ?? null, "Explore", L.nested[0], L.nested[1], haiku);
-  await Promise.all([
-    s.work(step2[0]?.agentId ?? "", sonnet, { reads: 2, edits: 3, bash: 1 }),
-    s.work(step2[1]?.agentId ?? "", sonnet, { reads: 1, writes: 2, bash: 1 }),
-    s.work(nested.agentId, haiku, { reads: 2 })
-  ]);
-  await pause(1500);
-  await say(13, { kind: "workflow", index: 0 });
-  const step3 = await s.spawn(null, "Plan", L.reviewer[0], L.reviewer[1], opus);
-  await s.work(step3.agentId, opus, { reads: 3, edits: 1, done: L.reviewDone });
-  mark(2, "completed");
-  mark(3, "in_progress");
-  await s.todos(null, plan);
-  await pause(3e3);
-  await say(14, { kind: "main" });
-  await s.inflateContext(185e3);
-  await s.sleep(1500);
-  await s.hook("PostCompact", null, { trigger: "auto" });
-  s.resetContext(32e3);
-  await s.usage(null, opus);
-  await pause(3500);
-  await say(15, { kind: "overview" });
-  await s.hook("UserPromptSubmit", null, { prompt: L.migratePrompt, prompt_id: randomUUID(), source: "user" });
-  const crash = await s.spawn(null, "general-purpose", L.migrate[0], L.migrate[1], sonnet);
-  await s.work(crash.agentId, sonnet, { reads: 1, fail: 'Error: relation "orders" does not exist' });
-  await pause(4e3);
-  await say(16, { kind: "workflow", index: 1 });
-  await s.hook("UserPromptSubmit", null, { prompt: L.auditPrompt, prompt_id: randomUUID(), source: "user" });
-  await s.sleep(800);
-  const tag = (n) => `[workflow:${L.auditName} step:${n}]`;
-  const audit1 = await Promise.all(L.auditTopics.map((topic) => s.spawn(null, "general-purpose", `${tag(1)} ${topic}`, `${tag(1)} ${L.auditTask(topic)}`, sonnet)));
-  await Promise.all(audit1.map((a) => s.work(a.agentId, sonnet, { reads: rnd(1, 3), edits: rnd(0, 1) })));
-  const audit2 = await Promise.all([
-    s.spawn(null, "general-purpose", `${tag(2)} ${L.fixes[0]}`, `${tag(2)} ${L.fixes[1]}`, opus),
-    s.spawn(null, "Plan", `${tag(2)} ${L.report[0]}`, `${tag(2)} ${L.report[1]}`, opus)
-  ]);
-  await Promise.all([s.work(audit2[0]?.agentId ?? "", opus, { reads: 1, edits: 4, bash: 1 }), s.work(audit2[1]?.agentId ?? "", opus, { reads: 2, writes: 1 })]);
-  mark(3, "completed");
-  mark(4, "in_progress");
-  await s.todos(null, plan);
-  await pause(2500);
-  await say(17, { kind: "main" });
-  await s.stream(null, L.stream);
-  mark(4, "completed");
-  await s.todos(null, plan);
-  await s.hook("TaskCompleted", null, { task_id: "demo-task", task_subject: L.task });
-  await s.hook("Stop", null, { last_assistant_message: L.stop });
-  await pause(3500);
-  await say(18, { kind: "surface" });
-  await s.hook("SessionEnd", null, { reason: "other" });
-  await pause(9e3);
-  await s.narrate(18, N, L.end[0], L.end[1], { kind: "overview" }, true);
-  return s.sessionId;
+  const step = async (n, focus, body, lead = LEAD_MS) => {
+    const [title, text] = L.steps[n - 1];
+    const start = s.clock;
+    await s.narrate(n, N, title, text, focus);
+    await s.sleep(lead);
+    await body();
+    await s.sleep(Math.max(1200, readingTime(text) - (s.clock - start)));
+  };
+  await step(1, main2, async () => {
+    await s.hook("SessionStart", null, { source: "startup", model: opus });
+    await s.events([{ kind: "session.title", sessionId: s.sessionId, at: Date.now(), source: "sim", title: L.title, priority: 3 }]);
+  });
+  await step(2, main2, async () => {
+    await s.hook("UserPromptSubmit", null, { prompt: L.prompt, prompt_id: randomUUID(), source: "user" });
+    await s.sleep(1200);
+    await s.usage(null, opus);
+  });
+  await step(3, main2, async () => {
+    await s.todos(null, plan);
+    await s.hook("TaskCreated", null, { task_id: "demo-task", task_subject: L.task });
+  });
+  await step(4, main2, async () => {
+    await s.read(null, "src/payment/stripe.ts");
+    await s.usage(null, opus);
+    await s.read(null, "src/lib/money.ts");
+    await s.toolCall(null, "Grep", { pattern: "chargeCard", path: L.cwd }, { ms: 1500 });
+    await s.usage(null, opus);
+  });
+  await step(5, main2, async () => {
+    mark(0, "completed");
+    mark(1, "in_progress");
+    await s.todos(null, plan);
+    await s.edit(null, "src/payment/stripe.ts", "big");
+    await s.usage(null, opus);
+  });
+  await step(6, main2, async () => {
+    await s.bash(null, "npm test -- payment", "FAIL tests/payment.test.ts \u2014 expected 1999 to be 2000");
+    await s.usage(null, opus);
+  });
+  await step(7, main2, async () => {
+    await s.hook("Notification", null, { notification_type: "permission_prompt", message: L.permission });
+  });
+  await step(8, main2, async () => {
+    await s.edit(null, "src/lib/money.ts");
+    await s.bash(null, "npm test -- payment");
+    await s.usage(null, opus);
+    mark(1, "completed");
+    mark(2, "in_progress");
+    await s.todos(null, plan);
+  });
+  let explorers = [];
+  await step(
+    9,
+    group({ kind: "spawned" }),
+    async () => {
+      explorers = await Promise.all(L.explorers.map(([d, p]) => s.spawn(null, "Explore", d, p, haiku)));
+      await s.sleep(1500);
+    },
+    300
+  );
+  await step(10, group(...explorers.map((a) => ({ kind: "agent", toolUseId: a.toolUseId }))), async () => {
+    await Promise.all(explorers.map((a, i) => s.work(a.agentId, haiku, { reads: 2 + i, done: L.reportDone })));
+    await s.usage(null, opus);
+  });
+  let implementers = [];
+  await step(
+    11,
+    group({ kind: "workflow", index: 0 }, { kind: "step", index: 0, step: 2 }),
+    async () => {
+      implementers = await Promise.all(L.implementers.map(([d, p]) => s.spawn(null, "general-purpose", d, p, sonnet)));
+      await s.sleep(1500);
+    },
+    300
+  );
+  const parent = implementers[0];
+  await step(
+    12,
+    group({ kind: "agent", toolUseId: parent.toolUseId }, { kind: "spawned" }),
+    async () => {
+      const nested = await s.spawn(parent.agentId, "Explore", L.nested[0], L.nested[1], haiku);
+      await Promise.all([
+        s.work(parent.agentId, sonnet, { reads: 2, edits: 3, bash: 1 }),
+        s.work(implementers[1]?.agentId ?? "", sonnet, { reads: 1, writes: 2, bash: 1 }),
+        s.work(nested.agentId, haiku, { reads: 2 })
+      ]);
+    },
+    300
+  );
+  await step(
+    13,
+    group({ kind: "workflow", index: 0 }, { kind: "spawned" }),
+    async () => {
+      const reviewer = await s.spawn(null, "Plan", L.reviewer[0], L.reviewer[1], opus);
+      await s.work(reviewer.agentId, opus, { reads: 3, edits: 1, done: L.reviewDone });
+      mark(2, "completed");
+      mark(3, "in_progress");
+      await s.todos(null, plan);
+    },
+    300
+  );
+  await step(14, main2, async () => {
+    await s.inflateContext(185e3);
+    await s.sleep(1500);
+    await s.hook("PostCompact", null, { trigger: "auto" });
+    s.resetContext(32e3);
+    await s.usage(null, opus);
+  });
+  await step(
+    15,
+    group({ kind: "main" }, { kind: "spawned" }),
+    async () => {
+      await s.hook("UserPromptSubmit", null, { prompt: L.migratePrompt, prompt_id: randomUUID(), source: "user" });
+      const crash = await s.spawn(null, "general-purpose", L.migrate[0], L.migrate[1], sonnet);
+      await s.work(crash.agentId, sonnet, { reads: 1, fail: 'Error: relation "orders" does not exist' });
+      await s.sleep(1500);
+    },
+    300
+  );
+  await step(16, group({ kind: "workflow", index: 1 }, { kind: "step", index: 1 }), async () => {
+    await s.hook("UserPromptSubmit", null, { prompt: L.auditPrompt, prompt_id: randomUUID(), source: "user" });
+    const tag = (n) => `[workflow:${L.auditName} step:${n}]`;
+    const audit1 = await Promise.all(L.auditTopics.map((topic) => s.spawn(null, "general-purpose", `${tag(1)} ${topic}`, `${tag(1)} ${L.auditTask(topic)}`, sonnet)));
+    await Promise.all(audit1.map((a) => s.work(a.agentId, sonnet, { reads: rnd(1, 3), edits: rnd(0, 1) })));
+    await s.sleep(1200);
+    const audit2 = await Promise.all([
+      s.spawn(null, "general-purpose", `${tag(2)} ${L.fixes[0]}`, `${tag(2)} ${L.fixes[1]}`, opus),
+      s.spawn(null, "Plan", `${tag(2)} ${L.report[0]}`, `${tag(2)} ${L.report[1]}`, opus)
+    ]);
+    await Promise.all([s.work(audit2[0]?.agentId ?? "", opus, { reads: 1, edits: 4, bash: 1 }), s.work(audit2[1]?.agentId ?? "", opus, { reads: 2, writes: 1 })]);
+    mark(3, "completed");
+    mark(4, "in_progress");
+    await s.todos(null, plan);
+  });
+  await step(17, main2, async () => {
+    await s.stream(null, L.stream);
+    mark(4, "completed");
+    await s.todos(null, plan);
+    await s.hook("TaskCompleted", null, { task_id: "demo-task", task_subject: L.task });
+    await s.hook("Stop", null, { last_assistant_message: L.stop });
+  });
+  await step(18, { kind: "surface" }, async () => {
+    await s.hook("SessionEnd", null, { reason: "other" });
+    await s.sleep(6e3);
+  });
+  await s.narrate(N, N, L.end[0], L.end[1], { kind: "overview" }, true);
 }
 var DemoRunner = class {
   constructor(transport, onError = () => {
@@ -42025,10 +42359,16 @@ process.on("uncaughtException", (e) => logErr(`uncaughtException: ${String(e.sta
 async function main() {
   const config = loadConfig();
   const store = new StateStore();
-  const eventLog = config.persist ? await EventLog.open(config.dataDir, logErr) : null;
-  const ingest = new Ingest(store, eventLog);
+  const ingest = new Ingest(store, null);
+  if (config.persist) ingest.deferLog();
   const hub = new SseHub(store);
+  const token = newToken();
+  const bundle = fileURLToPath2(import.meta.url);
+  let eventLog = null;
   let watcher = null;
+  let tick;
+  let purge;
+  let infoWritten = false;
   const demo = new DemoRunner(
     {
       hook: (payload) => ingest.handleHook(payload),
@@ -42036,12 +42376,35 @@ async function main() {
     },
     logErr
   );
+  const dropServerInfo = () => {
+    if (!infoWritten) return;
+    infoWritten = false;
+    removeServerInfo(config.dataDir);
+  };
+  let stopping = false;
+  const shutdown = async () => {
+    if (stopping) return;
+    stopping = true;
+    setTimeout(() => process.exit(0), 3e3).unref();
+    dropServerInfo();
+    demo.stop();
+    clearInterval(tick);
+    clearInterval(purge);
+    hub.stop();
+    await watcher?.stop();
+    await app.close();
+    eventLog?.close();
+    process.exit(0);
+  };
   const app = buildApp({
     config,
     store,
     ingest,
     hub,
     demo,
+    token,
+    bundle,
+    shutdown: () => void shutdown(),
     stats: () => ({
       sessions: store.sessions.size,
       agents: store.agents.size,
@@ -42061,31 +42424,34 @@ async function main() {
     }
     throw e;
   }
+  const bound = app.server.address();
+  if (bound && typeof bound === "object") config.port = bound.port;
+  process.on("SIGINT", () => void shutdown());
+  process.on("SIGTERM", () => void shutdown());
+  process.on("exit", dropServerInfo);
+  try {
+    ensurePrivateDir(config.dataDir);
+    writeServerInfo(config.dataDir, { app: APP_ID, port: config.port, pid: process.pid, token, bundle, startedAt: (/* @__PURE__ */ new Date()).toISOString() });
+    infoWritten = true;
+  } catch (e) {
+    logErr(`server.json non \xE9crit: ${String(e)}`);
+  }
   hub.start();
   process.stdout.write(`[clawd-base] http://${config.host}:${config.port}  (debug: /debug)
 `);
-  if (eventLog) {
+  if (config.persist) {
+    eventLog = await EventLog.open(config.dataDir, logErr);
     eventLog.forEachSince(Date.now() - config.maxAgeHours * 3600 * 1e3, (e) => store.apply(e));
+    ingest.attachLog(eventLog);
   }
+  if (stopping) return;
   watcher = new TranscriptWatcher(config.projectsDir, config.maxAgeHours * 3600 * 1e3, (evs) => ingest.applyTranscript(evs), logErr);
   await watcher.start();
   store.tick();
   process.stdout.write(`[clawd-base] ${store.sessions.size} session(s) charg\xE9e(s), ${watcher.trackedFiles} transcript(s) suivis
 `);
-  const tick = setInterval(() => store.tick(), 5e3);
-  const purge = setInterval(() => eventLog?.purge(), 6 * 3600 * 1e3);
-  const shutdown = async () => {
-    demo.stop();
-    clearInterval(tick);
-    clearInterval(purge);
-    hub.stop();
-    await watcher?.stop();
-    eventLog?.close();
-    await app.close();
-    process.exit(0);
-  };
-  process.on("SIGINT", () => void shutdown());
-  process.on("SIGTERM", () => void shutdown());
+  tick = setInterval(() => store.tick(), 5e3);
+  purge = setInterval(() => eventLog?.purge(), 6 * 3600 * 1e3);
 }
 main().catch((e) => {
   logErr(String(e instanceof Error ? e.stack : e));

@@ -94,15 +94,31 @@ export default function GameView() {
     scene.onMinimap = setMinimap;
     scene.compactForced = readPref('dash.compact', false);
     scene.follow = readPref('dash.follow', false);
-    void scene.init(el);
-    let lastNarration = 0;
+    // The demo caption and the side panel cover part of the canvas: the camera frames around them.
+    scene.insets = () => {
+      const host = el.getBoundingClientRect();
+      const out = { top: 8, right: 8, bottom: 8, left: 8 };
+      const caption = document.querySelector('.demo-overlay')?.getBoundingClientRect();
+      if (caption && caption.height > 0) out.bottom = Math.max(out.bottom, host.bottom - caption.top + 12);
+      const panel = document.querySelector('.side-panel')?.getBoundingClientRect();
+      if (panel && panel.width > 0 && panel.left < host.right) out.right = Math.max(out.right, host.right - panel.left + 12);
+      return out;
+    };
+    scene.init(el).catch(() => {
+      // No WebGL/WebGPU (GPU blocklist, VM…): fall back to the list view instead of a blank canvas.
+      const st = useDash.getState();
+      st.setView('list');
+      st.pushToast({ level: 'warn', text: t.noWebgl, sessionId: st.sessionId ?? '', agentId: null, at: Date.now() });
+    });
+    let lastNarration = '';
     const unsub = useDash.subscribe((s, prev) => {
       if (s.version !== prev.version) scene.pulse();
-      // Guided demo: the narration tells the camera where to look.
+      // Guided demo: each caption tells the camera what to frame; leaving the session ends it.
       const n = s.sessionId ? data.sessions.get(s.sessionId)?.narration : null;
-      if (n && n.at !== lastNarration) {
-        lastNarration = n.at;
-        scene.setFocus(n.focus);
+      const key = n ? `${s.sessionId}:${n.at}:${n.step}:${n.done}` : '';
+      if (key !== lastNarration) {
+        lastNarration = key;
+        scene.setFocus(n?.focus ?? null, n?.at);
       }
       if (s.showArchived !== prev.showArchived) scene.requestSync();
       if (s.version !== prev.version || s.selection !== prev.selection || s.sessionId !== prev.sessionId || s.config !== prev.config) scene.requestSync();
@@ -135,7 +151,7 @@ export default function GameView() {
             key={r.key}
             className="room-focus"
             style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
-            aria-label={`${r.entity === 'workflow' ? t.workflow : t.agent} : ${r.label}`}
+            aria-label={t.labelled(r.entity === 'workflow' ? t.workflow : t.agent, r.label)}
             onFocus={() => sceneRef.current?.focusRoom(r.key)}
             onClick={() => select({ kind: r.entity, id: r.id })}
           />

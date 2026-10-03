@@ -115,7 +115,7 @@ export function FilesView() {
               <span className="file-name">{basename(g.path)}</span>
               <span className="muted small file-rel">{rel(g.path)}</span>
               <span className="small muted">
-                {g.edits ? `${g.edits} ${t.op.edit}` : ''} {g.reads ? `${g.reads} ${t.op.read}` : ''}
+                {g.edits ? t.edits(g.edits) : ''} {g.reads ? t.reads(g.reads) : ''}
               </span>
               <span className="small muted">{formatTime(g.lastAt)}</span>
               {g.edits > 0 && (

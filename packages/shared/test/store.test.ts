@@ -393,3 +393,73 @@ describe('regressions from the code review', () => {
     expect(s.files.size).toBe(0);
   });
 });
+
+describe('StateStore — lifecycle edge cases', () => {
+  const spawnSub = (s: StateStore, at: number) => {
+    s.applyAll(hook({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_use_id: 'tu', tool_input: { subagent_type: 'Explore', description: 'x', prompt: 'x' } }, at));
+    s.applyAll(hook({ hook_event_name: 'SubagentStart', agent_id: 'sub', agent_type: 'Explore' }, at + 1));
+  };
+
+  it('the main agent is never dated to 1970', () => {
+    const s = new StateStore();
+    s.apply({ kind: 'session.title', sessionId: SID, at: 0, source: 'transcript', title: 't', priority: 2 });
+    expect(s.agents.get(SID)?.startedAt).toBeGreaterThan(0);
+    s.applyAll(hook({ hook_event_name: 'UserPromptSubmit', prompt: 'hi', prompt_id: 'p1' }, 5000));
+    expect(s.agents.get(SID)?.startedAt).toBeLessThanOrEqual(5000);
+  });
+
+  it('ending the session stops its sub-agents, even one stuck in a tool', () => {
+    const s = new StateStore();
+    spawnSub(s, 1000);
+    s.applyAll(hook({ hook_event_name: 'PreToolUse', agent_id: 'sub', agent_type: 'Explore', tool_name: 'Bash', tool_use_id: 'b1', tool_input: { command: 'sleep 999' } }, 1500));
+    s.applyAll(hook({ hook_event_name: 'SessionEnd', reason: 'other' }, 2000));
+    expect(s.agents.get('sub')).toMatchObject({ status: 'done', currentTool: null });
+    expect(s.agents.get('sub')?.endedAt).toBe(2000);
+    expect(s.agents.get(SID)?.status).toBe('done');
+  });
+
+  it('older lines replayed after the end do not reopen the session', () => {
+    const s = new StateStore();
+    s.applyAll(hook({ hook_event_name: 'SessionEnd', reason: 'other' }, 5000));
+    s.applyAll(hook({ hook_event_name: 'UserPromptSubmit', prompt: 'old', prompt_id: 'p-old' }, 3000));
+    s.applyAll(hook({ hook_event_name: 'Stop', last_assistant_message: 'old answer' }, 4000));
+    expect(s.sessions.get(SID)?.status).toBe('ended');
+    expect(s.agents.get(SID)?.status).toBe('done');
+    // A genuinely newer prompt (resumed session) does.
+    s.applyAll(hook({ hook_event_name: 'UserPromptSubmit', prompt: 'new', prompt_id: 'p-new' }, 9000));
+    expect(s.sessions.get(SID)?.status).toBe('active');
+    expect(s.agents.get(SID)?.status).toBe('running');
+  });
+
+  it('a busy sub-agent silent for over an hour is finished by tick', () => {
+    const s = new StateStore();
+    spawnSub(s, 1000);
+    s.applyAll(hook({ hook_event_name: 'PreToolUse', agent_id: 'sub', agent_type: 'Explore', tool_name: 'Bash', tool_use_id: 'b1', tool_input: { command: 'make' } }, 1500));
+    s.tick(1500 + 30 * 60_000);
+    expect(s.agents.get('sub')?.status).toBe('running'); // a long command is fine…
+    s.tick(1500 + 61 * 60_000);
+    expect(s.agents.get('sub')?.status).toBe('done'); // …but not forever
+  });
+
+  it('meta.json read before the parent transcript does not merge different turns into a workflow', () => {
+    const s = new StateStore();
+    // Cold start: the small meta files are read first…
+    s.applyAll(eventsFromAgentMeta(SID, 'agA', { agentType: 'Explore', toolUseId: 'tA' }, 1));
+    s.applyAll(eventsFromAgentMeta(SID, 'agB', { agentType: 'Explore', toolUseId: 'tB' }, 1));
+    // …then the main transcript: one agent in turn 1, another in turn 2.
+    const p = new TranscriptParser({ sessionId: SID, agentId: null });
+    const lines = [
+      promptLine(0, 'premier tour', 'p-1'),
+      ...assistantLines(1, 'm1', [toolUse('tA', 'Agent', { subagent_type: 'Explore', description: 'A', prompt: 'a' })]),
+      toolResultLine(2, 'tA', 'ok', { status: 'completed', agentId: 'agA' }),
+      promptLine(40, 'second tour', 'p-2'),
+      ...assistantLines(41, 'm2', [toolUse('tB', 'Agent', { subagent_type: 'Explore', description: 'B', prompt: 'b' })]),
+      toolResultLine(42, 'tB', 'ok', { status: 'completed', agentId: 'agB' }),
+    ];
+    for (const l of lines) s.applyAll(p.parseLine(l));
+    s.flush();
+    expect(s.agents.get('agA')?.parentTurn).toBe(1);
+    expect(s.agents.get('agB')?.parentTurn).toBe(2);
+    expect([...s.workflows.values()].filter((w) => w.sessionId === SID)).toEqual([]);
+  });
+});

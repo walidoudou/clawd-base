@@ -22,7 +22,11 @@ function str(v: unknown): string | null {
   return typeof v === 'string' ? v : null;
 }
 
-const NON_PROMPT_PREFIXES = ['<local-command-stdout>', '<local-command-stderr>', '<local-command-caveat>', '<system-reminder>', '<bash-stdout>', '<bash-stderr>'];
+// Not things the user asked the model: local command echoes (/model, /exit…: no model turn follows,
+// and they share their prompt id with the next real prompt), shell-mode input/output, reminders.
+const NON_PROMPT_PREFIXES = ['<local-command-stdout>', '<local-command-stderr>', '<local-command-caveat>', '<system-reminder>', '<bash-stdout>', '<bash-stderr>', '<bash-input>', '<command-name>', '<command-message>', '<command-args>'];
+/** What Claude Code writes when the user presses Esc: the turn is over (no end_turn follows). */
+const INTERRUPTED = '[Request interrupted by user';
 
 export interface TaskNotification {
   taskIds: string[];
@@ -61,6 +65,7 @@ export class TranscriptParser {
   private started = false;
   private lastText: string | null = null;
   private lastAt = 0;
+  private held: Obj[] = [];
 
   constructor(private readonly ctx: TranscriptContext) {}
 
@@ -84,12 +89,28 @@ export class TranscriptParser {
   }
 
   parseObject(o: Obj): NormalizedEvent[] {
-    const sessionId = str(o['sessionId']) ?? this.ctx.sessionId;
     // Metadata lines (titles, cost, mode…) have no timestamp: reuse the file's last one,
     // never "now", or reading an old file would make its session look active.
     const parsed = Date.parse(str(o['timestamp']) ?? '');
     if (parsed) this.lastAt = parsed;
-    const at = parsed || this.lastAt || 0;
+    if (!this.lastAt) {
+      // Undated lines before the first timestamp (a file often starts with its title): keep them
+      // until the file's start time is known, instead of dating the session to 1970.
+      if (this.held.length < 100) this.held.push(o);
+      return [];
+    }
+    const out: NormalizedEvent[] = [];
+    if (this.held.length) {
+      const held = this.held;
+      this.held = [];
+      for (const h of held) out.push(...this.parseAt(h, this.lastAt));
+    }
+    out.push(...this.parseAt(o, this.lastAt));
+    return out;
+  }
+
+  private parseAt(o: Obj, at: number): NormalizedEvent[] {
+    const sessionId = str(o['sessionId']) ?? this.ctx.sessionId;
     const agentId = str(o['agentId']) ?? this.ctx.agentId ?? sessionId;
     const base = { sessionId, at, source: 'transcript' as const };
     const out: NormalizedEvent[] = [];
@@ -192,7 +213,9 @@ export class TranscriptParser {
       }
     }
     const usage = usageFromApi(msg['usage']);
-    if (usage && messageId && o['isApiErrorMessage'] !== true) {
+    // Synthetic messages ("No response requested.", model "<synthetic>") carry an all-zero usage:
+    // counting it would reset the context gauge to 0.
+    if (usage && usage.total > 0 && model !== '<synthetic>' && messageId && o['isApiErrorMessage'] !== true) {
       out.push({ ...base, kind: 'usage', agentId, messageId, model, usage });
     }
     if (msg['stop_reason'] === 'end_turn') {
@@ -205,7 +228,8 @@ export class TranscriptParser {
   }
 
   private parseUser(o: Obj, base: { sessionId: string; at: number; source: 'transcript' }, agentId: string, out: NormalizedEvent[]): void {
-    if (o['isMeta'] === true) return;
+    // Meta lines, the summary written after /compact, transcript-only notes: not prompts.
+    if (o['isMeta'] === true || o['isCompactSummary'] === true || o['isVisibleInTranscriptOnly'] === true) return;
     const msg = obj(o['message']);
     if (!msg) return;
     const content = msg['content'];
@@ -238,6 +262,10 @@ export class TranscriptParser {
       }
       if (origin && origin['kind'] !== undefined && origin['kind'] !== 'human') return;
       const t = promptText.trimStart();
+      if (t.startsWith(INTERRUPTED)) {
+        out.push({ ...base, kind: 'turn.end', agentId, lastMessage: this.lastText });
+        return;
+      }
       if (!t || NON_PROMPT_PREFIXES.some((p) => t.startsWith(p))) return;
       out.push({ ...base, kind: 'prompt', agentId, text: truncateText(promptText, 4000), promptId: str(o['promptId']) });
       return;

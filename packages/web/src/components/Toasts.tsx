@@ -9,7 +9,7 @@ export function Toasts() {
   const dismiss = useDash((s) => s.dismissToast);
   const select = useDash((s) => s.select);
   const selectSession = useDash((s) => s.selectSession);
-  if (!toasts.length) return null;
+  // The live region stays mounted (even empty) so screen readers announce the first toast too.
   return (
     <div className="toasts" role="status" aria-live="polite">
       {toasts.map((x) => (

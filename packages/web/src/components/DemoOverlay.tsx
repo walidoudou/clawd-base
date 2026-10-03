@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { locale, t } from '../i18n/index.ts';
 import { data, useDash } from '../state.ts';
 import { MascotCanvas } from './MascotCanvas.tsx';
@@ -22,19 +22,25 @@ export async function startDemo(speed = 1): Promise<void> {
   st.selectSession(sessionId);
 }
 
-/** Typewriter effect: reveals `text` progressively, restarting when it changes. */
-function useTypewriter(text: string, cps = 55): string {
+/** Typewriter effect: reveals `text` progressively, restarting when it changes (speed changes apply on the fly). */
+function useTypewriter(text: string, cps: number): string {
   const [n, setN] = useState(0);
+  const rate = useRef(cps);
+  rate.current = cps;
   useEffect(() => {
     setN(0);
-    const start = performance.now();
+    let shown = 0;
+    let last = performance.now();
     const id = window.setInterval(() => {
-      const k = Math.floor(((performance.now() - start) / 1000) * cps);
-      setN(Math.min(text.length, k));
+      const now = performance.now();
+      shown += ((now - last) / 1000) * rate.current;
+      last = now;
+      const k = Math.min(text.length, Math.floor(shown));
+      setN(k);
       if (k >= text.length) window.clearInterval(id);
     }, 30);
     return () => window.clearInterval(id);
-  }, [text, cps]);
+  }, [text]);
   return text.slice(0, n);
 }
 
@@ -46,14 +52,22 @@ export function DemoOverlay() {
   const [speed, setSpeed] = useState(1);
   const [hidden, setHidden] = useState(false);
   const n = sessionId ? data.sessions.get(sessionId)?.narration : null;
-  const typed = useTypewriter(n?.text ?? '');
+  const typed = useTypewriter(n?.text ?? '', paused ? 0 : 55 * speed);
   useEffect(() => {
     setHidden(false);
   }, [n?.step]);
+  // A new tour starts at normal speed.
+  useEffect(() => {
+    setPaused(false);
+    setSpeed(1);
+  }, [sessionId]);
   if (!n || hidden) return null;
   const progress = Math.round((n.step / n.total) * 100);
   return (
-    <section className="demo-overlay" aria-live="polite" aria-label={t.demo.title}>
+    <section className="demo-overlay" aria-label={t.demo.title}>
+      <p className="sr-only" aria-live="polite">
+        {n.title}. {n.text}
+      </p>
       <div className="demo-head">
         <MascotCanvas id={sessionId ?? 'demo'} canonical anim={n.done ? 'celebrate' : 'idle'} scale={2} />
         <span className="demo-badge">{t.demo.title}</span>
@@ -99,10 +113,16 @@ export function DemoOverlay() {
       <div className="demo-progress" aria-hidden>
         <span style={{ width: `${progress}%` }} />
       </div>
-      <h2 className="demo-title">{n.title}</h2>
-      <p className="demo-text">
-        {typed}
-        {typed.length < n.text.length && <span className="demo-caret">▌</span>}
+      <h2 className="demo-title" aria-hidden>
+        {n.title}
+      </h2>
+      {/* The invisible full text reserves the final height: the box (and the camera framing around it) stays still while typing. */}
+      <p className="demo-text" aria-hidden>
+        <span className="demo-ghost">{n.text}</span>
+        <span className="demo-typed">
+          {typed}
+          {typed.length < n.text.length && <span className="demo-caret">▌</span>}
+        </span>
       </p>
       {paused && <div className="demo-paused">{t.demo.paused}</div>}
     </section>

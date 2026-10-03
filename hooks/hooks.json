@@ -1,5 +1,5 @@
 {
-  "description": "Clawd Base : envoie les événements au tableau de bord local (127.0.0.1). Non bloquant.",
+  "description": "Clawd Base: forwards events to the local dashboard (127.0.0.1). Never blocks, never fails (even without Node.js on the PATH).",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -56,7 +56,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -69,7 +69,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -81,7 +81,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -93,7 +93,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -106,7 +106,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -119,7 +119,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -132,7 +132,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -145,7 +145,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -157,7 +157,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 1,
             "async": true
           }
@@ -169,7 +169,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -181,7 +181,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }
@@ -194,7 +194,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/send-event.mjs\" || true",
             "timeout": 2,
             "async": true
           }

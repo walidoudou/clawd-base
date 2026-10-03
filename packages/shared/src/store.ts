@@ -9,6 +9,8 @@ import { detectWorkflows, nativeWorkflowName, type NativeWorkflowCall, type Spaw
 
 const DIFF_RANK: Record<FileChange['diffSource'], number> = { none: 0, strings: 1, snapshot: 2, structuredPatch: 3 };
 const IDLE_AFTER_MS = 10 * 60 * 1000;
+/** A "busy" sub-agent (running tool, pending permission) silent for this long is considered finished. */
+const STALE_BUSY_MS = 60 * 60 * 1000;
 const PROMPT_DEDUP_MS = 60 * 1000;
 const TIMELINE_MINUTES = 180;
 const MINUTE = 60_000;
@@ -266,7 +268,7 @@ export class StateStore {
         narration: null,
       };
       this.sessions.set(id, s);
-      this.agents.set(id, newAgent({ id, sessionId: id, kind: 'main', type: 'main', description: 'main' }, at));
+      this.agents.set(id, newAgent({ id, sessionId: id, kind: 'main', type: 'main', description: 'main' }, at > 0 ? at : Date.now()));
       this.mark('agent', id);
       this.pruneSessions(id);
     }
@@ -278,7 +280,7 @@ export class StateStore {
       this.mark('session', id);
       return s;
     }
-    if (at < s.startedAt) s.startedAt = at;
+    if (at > 0 && at < s.startedAt) s.startedAt = at;
     if (at > s.lastActivityAt) {
       s.lastActivityAt = at;
       if (s.status === 'idle' && at > this.now() - IDLE_AFTER_MS) s.status = 'active';
@@ -290,15 +292,16 @@ export class StateStore {
   private ensureAgent(sessionId: string, agentId: string, at: number): Agent {
     let a = this.agents.get(agentId);
     if (!a) {
+      const start = at > 0 ? at : Date.now();
       a =
         agentId === sessionId
-          ? newAgent({ id: agentId, sessionId, kind: 'main', type: 'main', description: 'main' }, at)
-          : newAgent({ id: agentId, sessionId, kind: 'sub', parentId: sessionId, status: 'running' }, at);
+          ? newAgent({ id: agentId, sessionId, kind: 'main', type: 'main', description: 'main' }, start)
+          : newAgent({ id: agentId, sessionId, kind: 'sub', parentId: sessionId, status: 'running' }, start);
       this.agents.set(agentId, a);
       this.workflowDirty.add(sessionId);
     }
     if (at > a.lastActivityAt) a.lastActivityAt = at;
-    if (at < a.startedAt) a.startedAt = at;
+    if (at > 0 && at < a.startedAt) a.startedAt = at;
     this.mark('agent', agentId);
     return a;
   }
@@ -426,10 +429,16 @@ export class StateStore {
       }
     }
     for (const a of this.agents.values()) {
-      if ((a.status === 'running' || a.status === 'starting') && now - a.lastActivityAt > IDLE_AFTER_MS) {
-        // A long command or a pending permission is not the end of a sub-agent.
-        if (a.kind === 'sub' && (a.waiting || (this.runningTools.get(a.id)?.length ?? 0) > 0)) continue;
-        a.status = a.kind === 'main' ? 'idle' : 'done';
+      if (a.status !== 'running' && a.status !== 'starting') continue;
+      const session = this.sessions.get(a.sessionId);
+      // Agents of an ended session cannot still be working (e.g. older transcript lines replayed after the end).
+      const sessionOver = session?.status === 'ended' && session.endedAt !== null && a.lastActivityAt <= session.endedAt;
+      if (sessionOver || now - a.lastActivityAt > IDLE_AFTER_MS) {
+        // A long command or a pending permission is not the end of a sub-agent (but nothing lasts an hour unnoticed).
+        const busy = a.waiting || (this.runningTools.get(a.id)?.length ?? 0) > 0;
+        if (a.kind === 'sub' && busy && !sessionOver && now - a.lastActivityAt < STALE_BUSY_MS) continue;
+        a.status = a.kind === 'main' ? (sessionOver ? 'done' : 'idle') : 'done';
+        a.waiting = null;
         if (a.kind === 'sub') {
           this.staleDone.add(a.id);
           if (!a.endedAt) a.endedAt = a.lastActivityAt;
@@ -471,8 +480,19 @@ export class StateStore {
       case 'session.end': {
         s.endedAt = ev.at;
         s.status = 'ended';
-        const main = this.agents.get(s.id);
-        if (main) { main.status = 'done'; main.currentTool = null; this.mark('agent', main.id); }
+        // Claude Code is gone: nothing of this session is still running (sub-agents included).
+        for (const a of this.agents.values()) {
+          if (a.sessionId !== s.id) continue;
+          if (a.kind === 'main' || a.status === 'running' || a.status === 'starting') {
+            if (a.status !== 'error') a.status = 'done';
+            if (a.kind === 'sub') a.endedAt = a.endedAt ?? ev.at;
+            a.currentTool = null;
+            a.currentToolInputPreview = null;
+            a.waiting = null;
+            this.runningTools.delete(a.id);
+            this.mark('agent', a.id);
+          }
+        }
         this.log(ev, s.title);
         break;
       }
@@ -498,10 +518,14 @@ export class StateStore {
         if (texts.size > 500) texts.delete(texts.keys().next().value as string);
         const a = this.ensureAgent(s.id, ev.agentId, ev.at);
         a.turns += 1;
-        a.status = 'running';
-        a.waiting = null;
         if (a.kind === 'main') s.lastPrompt = truncateText(ev.text, 300);
-        if (s.status === 'ended') { s.status = 'active'; s.endedAt = null; }
+        // A prompt older than the session's end is history (replay order), not a resumed session.
+        const stale = s.status === 'ended' && s.endedAt !== null && ev.at <= s.endedAt;
+        if (!stale) {
+          a.status = 'running';
+          a.waiting = null;
+          if (s.status === 'ended') { s.status = 'active'; s.endedAt = null; }
+        }
         this.log(ev, truncateText(ev.text.replace(/\s+/g, ' '), 80), a.id);
         break;
       }
@@ -518,6 +542,9 @@ export class StateStore {
         }
         a.parentId = parent.id;
         a.spawnToolUseId = ev.toolUseId;
+        // Created earlier from its meta.json (read before the parent transcript): learn its turn now,
+        // or the heuristic would group agents of different turns into one workflow.
+        if (holder && !a.parentTurn) a.parentTurn = parent.turns;
         if (ev.parentMessageId) a.parentMessageId = ev.parentMessageId;
         if (a.type === 'general-purpose' || !a.type) a.type = ev.agentType;
         if (!a.description) a.description = ev.description;
@@ -539,7 +566,9 @@ export class StateStore {
           const pending = [...this.agents.values()]
             .filter((x) => x.sessionId === s.id && x.id.startsWith('t:'))
             .sort((x, y) => x.startedAt - y.startedAt);
-          const match = pending.find((x) => !ev.agentType || x.type === ev.agentType) ?? pending[0];
+          // Without a type (first line of a sub-agent transcript), guessing among several spawns is a
+          // coin toss: wait for the meta.json link instead.
+          const match = ev.agentType ? (pending.find((x) => x.type === ev.agentType) ?? pending[0]) : pending.length === 1 ? pending[0] : undefined;
           if (match) a = this.rekey(match.id, ev.agentId);
         }
         const known = !!a;
@@ -721,7 +750,8 @@ export class StateStore {
         this.staleDone.delete(a.id);
         if (ev.lastMessage) a.lastMessage = ev.lastMessage;
         if (a.kind === 'main') {
-          if (a.status !== 'error') a.status = 'idle';
+          // 'done' = the session ended: an older turn end must not bring it back to idle.
+          if (a.status !== 'error' && a.status !== 'done') a.status = 'idle';
         } else if (a.status !== 'error') {
           a.status = 'done';
           a.endedAt = a.endedAt ?? ev.at;
@@ -868,11 +898,14 @@ export class StateStore {
           right.parentId = wrong.parentId;
           right.parentMessageId = wrong.parentMessageId;
           right.parentTurn = wrong.parentTurn;
-          right.description = right.description || wrong.description;
-          if (wrong.prompt.length > right.prompt.length) right.prompt = wrong.prompt;
+          // What came from this spawn belongs to the right agent, not to the earlier wrong guess.
+          if (wrong.description) right.description = wrong.description;
+          if (wrong.prompt) right.prompt = wrong.prompt;
           right.background = wrong.background;
           wrong.spawnToolUseId = null;
           wrong.parentMessageId = null;
+          wrong.description = '';
+          wrong.prompt = '';
           this.mark('agent', wrong.id);
         }
         right.spawnToolUseId = toolUseId;

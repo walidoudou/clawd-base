@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { StateStore, hookToEvents } from '@dash/shared';
-import { DEMO_STEPS, DemoAborted, DemoRunner, runGuidedDemo, type DemoTransport } from '../src/demo.ts';
+import { DEMO_STEPS, DemoAborted, DemoRunner, readingTime, runGuidedDemo, type DemoTransport } from '../src/demo.ts';
 
 /** In-process transport; with `speed`, timestamps follow a virtual clock running that much faster. */
 function inProcess(store: StateStore, speed = 1): DemoTransport {
@@ -47,6 +47,40 @@ describe('guided demo', () => {
     store.flush();
     expect(store.sessions.get(id)).toMatchObject({ title: 'Guided demo — payment refactor', narration: expect.objectContaining({ title: 'End of the demo', done: true }) });
     expect([...store.workflows.values()].some((w) => w.sessionId === id && w.name === 'security-audit')).toBe(true);
+  });
+
+  it('leaves every caption up long enough to be read', async () => {
+    const store = new StateStore();
+    const base = inProcess(store, 400);
+    const captions: Array<{ step: number; text: string; at: number; focus: unknown }> = [];
+    const t0 = Date.now();
+    const transport: DemoTransport = {
+      hook: base.hook,
+      events: async (evs) => {
+        // demo time ≈ real time × speed
+        for (const e of evs) if (e.kind === 'narration') captions.push({ step: e.narration.step, text: e.narration.text, at: (Date.now() - t0) * 400, focus: e.narration.focus });
+        return base.events(evs);
+      },
+    };
+    await runGuidedDemo(transport, { speed: 400, paused: false, aborted: false });
+    expect(captions.map((c) => c.step)).toEqual([...Array.from({ length: DEMO_STEPS }, (_, i) => i + 1), DEMO_STEPS]);
+    for (let i = 0; i < captions.length - 1; i++) {
+      const c = captions[i]!;
+      expect(captions[i + 1]!.at - c.at).toBeGreaterThanOrEqual(readingTime(c.text) - 400);
+    }
+    // every step tells the camera what to frame
+    expect(captions.every((c) => c.focus !== null)).toBe(true);
+  });
+
+  it('closes the caption when stopped', async () => {
+    const store = new StateStore();
+    const ctl = { speed: 1, paused: false, aborted: false };
+    let id = '';
+    const p = runGuidedDemo(inProcess(store), ctl, (sid) => (id = sid));
+    setTimeout(() => (ctl.aborted = true), 50);
+    await expect(p).rejects.toBeInstanceOf(DemoAborted);
+    store.flush();
+    expect(store.sessions.get(id)?.narration).toMatchObject({ title: 'Démo arrêtée', done: true });
   });
 
   it('can be stopped and restarted', async () => {
