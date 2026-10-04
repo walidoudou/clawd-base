@@ -1,5 +1,6 @@
 import { Container, Graphics, Rectangle, Sprite, Text, type TextStyleOptions } from 'pixi.js';
-import type { Anim } from '@dash/shared';
+import type { Anim, Domain } from '@dash/shared';
+import { THEME_FX } from './themes.ts';
 import { roomGeometry, type RoomGeometry, type RoomKind, type Stations } from './tiles.ts';
 import { lampTexture, mascotTexture, propTexture, releaseRoomTexture, roomTexture, sparkleTexture, zzzTexture, type PropKind } from './textures.ts';
 import { ParticleSystem } from './particles.ts';
@@ -50,6 +51,8 @@ export interface RoomInfo {
   liveText: string | null;
   screenActive: boolean;
   steps: StepBox[] | null;
+  /** Field the room works in: picks its decor, the mascot's accessory and tools, the animations. */
+  domain: Domain;
 }
 
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
@@ -107,6 +110,8 @@ export class RoomView extends Container {
   private readonly scaffold = new Graphics();
   private readonly bg = new Sprite();
   private readonly screenG = new Graphics();
+  private readonly ambientG = new Graphics();
+  private lastAmbient = '';
   private readonly stepsG = new Graphics();
   private readonly glowG = new Graphics();
   private readonly mascot = new Sprite();
@@ -171,6 +176,7 @@ export class RoomView extends Container {
     this.content.addChild(
       this.bg,
       this.screenG,
+      this.ambientG,
       this.stepsG,
       this.glowG,
       this.lamp,
@@ -228,12 +234,20 @@ export class RoomView extends Container {
   }
 
   private build(info: RoomInfo): void {
-    // Kind/width changed (e.g. agent → compact when done): free the previous background.
-    if (this.info) releaseRoomTexture(this.info.kind, this.info.seed, roomGeometry(this.info.kind, this.info.width).w);
-    this.kindKey = `${info.kind}|${info.width}`;
+    // Kind/width/domain changed (e.g. agent → compact when done): free the previous background.
+    const prev = this.info;
+    if (prev) releaseRoomTexture(prev.kind, prev.seed, roomGeometry(prev.kind, prev.width).w, prev.domain);
+    this.kindKey = `${info.kind}|${info.width}|${info.domain}`;
     this.geo = roomGeometry(info.kind, info.width);
     const g = this.geo;
-    this.bg.texture = roomTexture(info.kind, info.seed, g.w);
+    this.bg.texture = roomTexture(info.kind, info.seed, g.w, info.domain);
+    // The room changes field: it gets refitted in a cloud of dust.
+    if (prev && prev.domain !== info.domain && !info.filler) {
+      this.fx.dust(0, g.floorY + 2, g.w, 24);
+      this.fx.swirl(g.w / 2, g.floorY - 40, g.w * 0.8, 70, 26);
+    }
+    this.ambientG.clear();
+    this.lastAmbient = '';
     this.hitArea = new Rectangle(0, 0, g.w, g.h);
     this.mascot.scale.set(g.mascotScale);
     if (!this.info) this.mascotX = info.filler ? g.stations.desk : g.stations.door;
@@ -274,7 +288,7 @@ export class RoomView extends Container {
 
   update(info: RoomInfo): void {
     const prev = this.info;
-    if (`${info.kind}|${info.width}` !== this.kindKey) this.build(info);
+    if (`${info.kind}|${info.width}|${info.domain}` !== this.kindKey) this.build(info);
     this.info = info;
     const g = this.geo;
     const big = info.kind === 'main' || info.kind === 'chief';
@@ -570,14 +584,18 @@ export class RoomView extends Container {
       this.lastScreenFrame = screenKey;
       const sc = g.screen;
       this.screenG.clear();
-      if (info.screenActive) {
-        for (let i = 0; i < 4; i++) {
-          const w = 4 + ((fastFrame * 7 + i * 5) % (sc.w - 6));
-          this.screenG.rect(sc.x + 2, sc.y + 1 + i * 2.5, w, 1).fill(i === 3 ? 0xffe7a3 : 0x6cc4ff);
-        }
-        this.screenG.rect(sc.x, sc.y, sc.w, sc.h).fill({ color: 0x6cc4ff, alpha: 0.06 + 0.05 * (fastFrame % 2) });
-      } else if (!info.filler) {
+      if (info.screenActive) THEME_FX[info.domain].screen(this.screenG, sc, fastFrame);
+      else if (!info.filler) {
         this.screenG.rect(sc.x + 2, sc.y + 2, 6, 1).fill({ color: 0x6cc4ff, alpha: 0.5 });
+      }
+    }
+    // the room's animated object (arcade screen, REC light, server LEDs…)
+    if (g.sideX !== null && info.domain !== 'code' && !info.filler) {
+      const key = `${info.screenActive ? fastFrame : animFrame}|${info.screenActive}`;
+      if (key !== this.lastAmbient) {
+        this.lastAmbient = key;
+        this.ambientG.clear();
+        THEME_FX[info.domain].ambient(this.ambientG, g.sideX, g.floorY, info.screenActive ? fastFrame : animFrame, info.screenActive);
       }
     }
     if (info.steps && Math.floor(now / 60) % 2 === 0) this.drawSteps(info.steps, now);
@@ -622,7 +640,7 @@ export class RoomView extends Container {
     const anim: Anim = walking ? 'walk' : this.removing ? 'idle' : info.anim;
     // natural blinking: idle shows the blink frame only briefly
     const frame = anim === 'idle' ? (now % 3400 < 140 ? 1 : 0) : walking || anim === 'type' ? fastFrame : animFrame;
-    this.mascot.texture = mascotTexture(info.seed, { chief: info.chief, canonical: info.canonical }, anim, frame, info.spriteSet);
+    this.mascot.texture = mascotTexture(info.seed, { chief: info.chief, canonical: info.canonical }, anim, frame, info.spriteSet, info.domain);
     const s = g.mascotScale;
     const bob = anim === 'celebrate' ? (animFrame % 2) * -2 * s : walking ? -(fastFrame % 2) : 0;
     const jitter = anim === 'error' ? ((fastFrame % 2) - 0.5) * 2 : 0;
@@ -637,7 +655,7 @@ export class RoomView extends Container {
     if (propKind === 'none') this.prop.visible = false;
     else {
       this.prop.visible = true;
-      this.prop.texture = propTexture(propKind, propKind === 'bubble' || propKind === 'question' ? animFrame : fastFrame);
+      this.prop.texture = propTexture(propKind, propKind === 'bubble' || propKind === 'question' ? animFrame : fastFrame, info.domain);
       const ps = Math.max(1, s - 1);
       this.prop.scale.set(ps);
       const pw = this.prop.texture.width * ps;

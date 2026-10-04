@@ -15190,11 +15190,11 @@ var require_util = __commonJS({
       return false;
     }
     exports.schemaHasRules = schemaHasRules;
-    function schemaHasRulesButRef(schema, RULES) {
+    function schemaHasRulesButRef(schema, RULES2) {
       if (typeof schema == "boolean")
         return !schema;
       for (const key in schema)
-        if (key !== "$ref" && RULES.all[key])
+        if (key !== "$ref" && RULES2.all[key])
           return true;
       return false;
     }
@@ -16588,17 +16588,17 @@ var require_validate = __commonJS({
     }
     function schemaKeywords(it, types, typeErrors, errsCount) {
       const { gen, schema, data, allErrors, opts, self } = it;
-      const { RULES } = self;
-      if (schema.$ref && (opts.ignoreKeywordsWithRef || !(0, util_1.schemaHasRulesButRef)(schema, RULES))) {
-        gen.block(() => keywordCode(it, "$ref", RULES.all.$ref.definition));
+      const { RULES: RULES2 } = self;
+      if (schema.$ref && (opts.ignoreKeywordsWithRef || !(0, util_1.schemaHasRulesButRef)(schema, RULES2))) {
+        gen.block(() => keywordCode(it, "$ref", RULES2.all.$ref.definition));
         return;
       }
       if (!opts.jtd)
         checkStrictTypes(it, types);
       gen.block(() => {
-        for (const group of RULES.rules)
+        for (const group of RULES2.rules)
           groupKeywords(group);
-        groupKeywords(RULES.post);
+        groupKeywords(RULES2.post);
       });
       function groupKeywords(group) {
         if (!(0, applicability_1.shouldUseGroup)(schema, group))
@@ -18697,10 +18697,10 @@ var require_core = __commonJS({
       }
       // Remove keyword
       removeKeyword(keyword) {
-        const { RULES } = this;
-        delete RULES.keywords[keyword];
-        delete RULES.all[keyword];
-        for (const group of RULES.rules) {
+        const { RULES: RULES2 } = this;
+        delete RULES2.keywords[keyword];
+        delete RULES2.all[keyword];
+        for (const group of RULES2.rules) {
           const i = group.rules.findIndex((rule) => rule.keyword === keyword);
           if (i >= 0)
             group.rules.splice(i, 1);
@@ -18868,9 +18868,9 @@ var require_core = __commonJS({
     }
     var KEYWORD_NAME = /^[a-z_$][a-z0-9_$:-]*$/i;
     function checkKeyword(keyword, def) {
-      const { RULES } = this;
+      const { RULES: RULES2 } = this;
       (0, util_1.eachItem)(keyword, (kwd) => {
-        if (RULES.keywords[kwd])
+        if (RULES2.keywords[kwd])
           throw new Error(`Keyword ${kwd} is already defined`);
         if (!KEYWORD_NAME.test(kwd))
           throw new Error(`Keyword ${kwd} has invalid name`);
@@ -18886,13 +18886,13 @@ var require_core = __commonJS({
       const post = definition === null || definition === void 0 ? void 0 : definition.post;
       if (dataType && post)
         throw new Error('keyword with "post" flag cannot have "type"');
-      const { RULES } = this;
-      let ruleGroup = post ? RULES.post : RULES.rules.find(({ type: t }) => t === dataType);
+      const { RULES: RULES2 } = this;
+      let ruleGroup = post ? RULES2.post : RULES2.rules.find(({ type: t }) => t === dataType);
       if (!ruleGroup) {
         ruleGroup = { type: dataType, rules: [] };
-        RULES.rules.push(ruleGroup);
+        RULES2.rules.push(ruleGroup);
       }
-      RULES.keywords[keyword] = true;
+      RULES2.keywords[keyword] = true;
       if (!definition)
         return;
       const rule = {
@@ -18907,7 +18907,7 @@ var require_core = __commonJS({
         addBeforeRule.call(this, ruleGroup, rule, definition.before);
       else
         ruleGroup.rules.push(rule);
-      RULES.all[keyword] = rule;
+      RULES2.all[keyword] = rule;
       (_a = definition.implements) === null || _a === void 0 ? void 0 : _a.forEach((kwd) => this.addKeyword(kwd));
     }
     function addBeforeRule(ruleGroup, rule, before) {
@@ -34558,20 +34558,20 @@ var require_form_data = __commonJS({
       const boundary = `----formdata-${randomUUID2()}`;
       const prefix = `--${boundary}\r
 Content-Disposition: form-data`;
-      const escape2 = (str4) => str4.replace(/\n/g, "%0A").replace(/\r/g, "%0D").replace(/"/g, "%22");
+      const escape3 = (str4) => str4.replace(/\n/g, "%0A").replace(/\r/g, "%0D").replace(/"/g, "%22");
       const normalizeLinefeeds = (value) => value.replace(/\r?\n|\r/g, "\r\n");
       const linebreak = new Uint8Array([13, 10]);
       async function* asyncIterator() {
         for (const [name, value] of formdata) {
           if (typeof value === "string") {
-            yield textEncoder.encode(`${prefix}; name="${escape2(normalizeLinefeeds(name))}"\r
+            yield textEncoder.encode(`${prefix}; name="${escape3(normalizeLinefeeds(name))}"\r
 \r
 `);
             yield textEncoder.encode(`${normalizeLinefeeds(value)}\r
 `);
           } else {
-            let header = `${prefix}; name="${escape2(normalizeLinefeeds(name))}"`;
-            value.name && (header += `; filename="${escape2(value.name)}"`);
+            let header = `${prefix}; name="${escape3(normalizeLinefeeds(name))}"`;
+            value.name && (header += `; filename="${escape3(value.name)}"`);
             header += `\r
 Content-Type: ${value.type || "application/octet-stream"}\r
 \r
@@ -37087,6 +37087,96 @@ function addRequest(s, r, sign) {
   bump(s.mcpServers, a.mcpServer, cost);
 }
 
+// packages/shared/src/domain.ts
+var RULES = {
+  game: {
+    mcp: /roblox|unity|unreal|godot|uefn|fortnite/i,
+    skill: /roblox|uefn|unity|godot|unreal|game/i,
+    file: /\.(verse|luau|rbxl|rbxlx|rbxm|rbxmx|uasset|umap|uplugin|uproject|unity|prefab|gd|tscn|tres)$/i,
+    project: /uefn|fortnite|roblox|unity|godot|unreal|game|jeu/i,
+    command: /\b(rojo|wally|godot|unityhub|UnrealEditor)\b/i,
+    words: ["uefn", "verse", "fortnite", "roblox", "luau", "unity", "godot", "unreal", "gameplay", "jeu vid\xE9o", "jeux vid\xE9o", "jeu", "game", "gamer", "level design", "npc", "pnj", "joueur", "joueurs", "player", "players", "obby", "tycoon", "leaderboard"]
+  },
+  marketing: {
+    mcp: /klaviyo|ahrefs|semrush|mailchimp|similarweb|supermetrics|amplitude|postiz|buffer|meta.?ads|google.?ads|tiktok/i,
+    skill: /^marketing:|seo|copywriting|copy-editing|\bads?\b|ad-creative|campaign|social|emails?\b|launch|cro\b|brand|postiz|content|influencer|newsletter/i,
+    project: /marketing|growth|seo|brand|campagne|campaign/i,
+    words: ["marketing", "seo", "campagne", "campagnes", "campaign", "campaigns", "publicit\xE9", "pub", "pubs", "ads", "newsletter", "emailing", "copywriting", "r\xE9seaux sociaux", "social media", "instagram", "tiktok", "linkedin", "tweet", "audience", "funnel", "leads", "branding", "influenceur", "influencer", "growth", "engagement", "persona"]
+  },
+  business: {
+    mcp: /stripe|quickbooks|salesforce|hubspot|xero|zoho|pipedrive|shopify|paypal|square|gusto|ramp|expensify|docusign|systeme/i,
+    skill: /^sales:|^small-business:|finance|invoice|pricing|payroll|tax|offers|revops|prospect/i,
+    file: /\.(xlsx|xls|ods)$/i,
+    project: /business|finance|compta|invoice|facture|crm|shop|boutique|store/i,
+    words: ["business", "finance", "facture", "factures", "invoice", "invoices", "devis", "comptabilit\xE9", "crm", "ventes", "sales", "chiffre d'affaires", "revenue", "pricing", "tarif", "tarifs", "prospect", "prospects", "budget", "paie", "payroll", "imp\xF4ts", "tax", "boutique", "e-commerce", "ecommerce", "shopify", "stripe", "abonnement", "subscription"]
+  },
+  video: {
+    mcp: /remotion|videodb|youtube|runway|heygen/i,
+    skill: /video|film|remotion|motion|manim|tasteforge/i,
+    file: /\.(mp4|mov|webm|mkv|prproj|aep|fcpxml|drp)$/i,
+    project: /video|vidéo|film|motion|remotion|clip|youtube|trailer/i,
+    command: /\b(ffmpeg|ffprobe|remotion|manim)\b/i,
+    words: ["vid\xE9o", "vid\xE9os", "video", "videos", "film", "remotion", "motion design", "montage", "clip", "trailer", "teaser", "storyboard", "youtube", "keyframe", "keyframes", "cin\xE9matique", "cinematic", "reel"]
+  },
+  design: {
+    mcp: /figma|canva|blender|penpot|sketch|tripo|hyper3d|hunyuan/i,
+    skill: /design|canvas|figma|brand-guidelines|theme-factory|liquid-glass|taste|interfaces/i,
+    file: /\.(fig|sketch|psd|ai|blend|xd|kra|procreate|glb|gltf|fbx|obj)$/i,
+    project: /design|figma|blender|3d|ui-?kit|mockup/i,
+    command: /\b(blender|inkscape|magick|convert)\b/i,
+    words: ["design", "maquette", "maquettes", "mockup", "figma", "blender", "3d", "logo", "typographie", "typography", "illustration", "wireframe", "charte graphique", "mod\xE8le 3d", "texture", "textures", "rendu 3d"]
+  },
+  audio: {
+    mcp: /elevenlabs|spotify|suno|audio|soundcloud/i,
+    skill: /audio|music|voice|sound|tts/i,
+    file: /\.(wav|mp3|flac|ogg|aiff|aif|mid|midi|als|flp|m4a)$/i,
+    project: /audio|music|musique|sound|podcast|beat/i,
+    command: /\b(sox|afplay|lame)\b/i,
+    words: ["musique", "music", "sound", "sounds", "audio", "voix", "voice", "voix off", "voiceover", "podcast", "beat", "mixage", "mastering", "sfx", "bruitage", "tts", "elevenlabs", "chanson", "m\xE9lodie", "melody", "bpm", "synth\xE9"]
+  },
+  bot: {
+    mcp: /discord|telegram/i,
+    skill: /discord|bot/i,
+    project: /bot|discord|telegram/i,
+    words: ["discord", "discord.js", "bot", "bots", "slash command", "slash commands", "commande slash", "commandes slash", "guild", "guilds", "serveur discord", "telegram", "embed", "embeds", "intents"]
+  },
+  data: {
+    mcp: /jupyter|bigquery|snowflake|databricks|huggingface|kaggle|clickhouse/i,
+    skill: /\bdata\b|pytorch|\bml\b|rag-|llm|scientific|eval|recsys|mle/i,
+    file: /\.(ipynb|parquet|pkl|pt|pth|onnx|h5|safetensors|csv|tsv)$/i,
+    project: /data|\bml\b|\bai\b|\bia\b|llm|analytics|notebook/i,
+    command: /\b(jupyter|nvidia-smi|ollama)\b|pip3? install .*(torch|tensorflow|pandas|scikit|transformers)/i,
+    words: ["donn\xE9es", "data", "dataset", "datasets", "machine learning", "ml", "ia", "llm", "pandas", "numpy", "pytorch", "tensorflow", "entra\xEEnement", "training", "embedding", "embeddings", "rag", "notebook", "statistiques", "statistics", "r\xE9gression", "regression", "classification", "fine-tuning", "inference", "inf\xE9rence"]
+  },
+  devops: {
+    mcp: /docker|kubernetes|aws|gcp|azure|vercel|cloudflare|terraform|sentry|netlify|railway|fly/i,
+    skill: /deploy|docker|kubernetes|devops|infra|terraform|pm2|canary|uncloud/i,
+    file: /(dockerfile|docker-compose\.ya?ml|compose\.ya?ml|\.tf|\.github\/workflows\/[^/]+\.ya?ml|nginx\.conf|\.service|k8s\/[^/]+\.ya?ml|helm\/)/i,
+    project: /infra|devops|deploy|server|k8s|docker|ops/i,
+    command: /\b(docker|kubectl|helm|terraform|systemctl|pm2|nginx|vercel|flyctl|ssh|scp)\b|\bgh (run|workflow)\b|\baws /i,
+    words: ["d\xE9ploiement", "d\xE9ployer", "deploy", "deployment", "docker", "kubernetes", "k8s", "ci/cd", "vps", "nginx", "infra", "infrastructure", "monitoring", "uptime", "ssl", "dns", "terraform", "conteneur", "container", "cluster"]
+  },
+  security: {
+    mcp: /burp|nmap|shodan|semgrep|snyk|virustotal/i,
+    skill: /security|pentest|bounty|safety|sanitiz|hipaa|gateguard/i,
+    file: /\.(pem|key|crt|p12)$/i,
+    project: /secu|pentest|ctf|hack|vuln/i,
+    command: /\b(nmap|sqlmap|hydra|nikto|semgrep|trivy|gitleaks)\b|npm audit/i,
+    words: ["s\xE9curit\xE9", "security", "vuln\xE9rabilit\xE9", "vuln\xE9rabilit\xE9s", "vulnerability", "vulnerabilities", "cve", "pentest", "faille", "failles", "xss", "injection", "csrf", "ctf", "exploit", "chiffrement", "encryption", "malware", "phishing", "owasp"]
+  },
+  web: {
+    skill: /frontend|react|vue|next|vite|css|tailwind|\bweb\b|angular|nuxt|a11y/i,
+    file: /\.(tsx|jsx|vue|svelte|astro|css|scss|sass|less|html)$/i,
+    project: /web|site|front|landing|portfolio/i,
+    command: /\b(vite|next (dev|build)|npm run dev|astro)\b/i,
+    words: ["site web", "website", "frontend", "front-end", "react", "next.js", "nextjs", "css", "tailwind", "html", "landing page", "page web", "composant", "composants", "component", "components", "responsive", "navigateur", "browser"]
+  }
+};
+var escape2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var WORD_RE = Object.fromEntries(
+  Object.entries(RULES).map(([d, r]) => [d, new RegExp(`(?<![\\p{L}\\p{N}_])(?:${r.words.map(escape2).join("|")})(?![\\p{L}\\p{N}_])`, "giu")])
+);
+
 // packages/shared/src/truncate.ts
 var LIMITS = {
   toolOutputChars: 4e3,
@@ -39521,7 +39611,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 var APP_ID = "clawd-base";
-var VERSION = "1.3.0";
+var VERSION = "1.4.0";
 var DEFAULT_PORT = 4317;
 function env(name) {
   return process.env[`CLAWD_BASE_${name}`] ?? process.env[`CLAUDE_DASH_${name}`];
@@ -42301,7 +42391,7 @@ var TEXT = {
       ["Les explorateurs travaillent", "Ils lisent en parall\xE8le. Un agent qui a fini fait la f\xEAte sous les confettis, puis s\u2019endort : sa salle s\u2019\xE9teint et r\xE9tr\xE9cit."],
       ["\xC9tape 2 : un workflow appara\xEEt", "Un deuxi\xE8me lot d\u2019agents dans le m\xEAme tour forme un workflow : la salle du chef appara\xEEt et ses c\xE2bles s\u2019allument vers l\u2019\xE9tape en cours."],
       ["Un agent d\xE9l\xE8gue \xE0 son tour", "Un sous-agent peut lancer ses propres agents : un c\xE2ble violet en pointill\xE9s relie le parent \xE0 l\u2019enfant."],
-      ["\xC9tape 3 : relecture", "Derni\xE8re \xE9tape : un agent Plan relit le tout. Sur son tableau, le chef suit les \xE9tapes (\u25A0 termin\xE9e, \u25B6 en cours)."],
+      ["\xC9tape 3 : le marketing", "Un agent \xE9crit la page de lancement avec un skill marketing : sa salle prend le d\xE9cor de son domaine (jeu, vid\xE9o, marketing\u2026). Le chef suit les \xE9tapes (\u25A0 termin\xE9e, \u25B6 en cours)."],
       ["Le contexte se compacte", "La jauge de contexte approche de la limite : Claude compacte la conversation, un tourbillon passe et la jauge redescend."],
       ["Un agent plante", "L\u2019agent charg\xE9 de la migration rencontre une erreur fatale : salle secou\xE9e, alarme rouge, notification. Il reste visible pour l\u2019analyse."],
       ["Workflow explicite", "Le marqueur [workflow:nom step:n] regroupe des agents \xE0 la main. Ici, un audit en deux \xE9tapes : quatre audits en parall\xE8le, puis correctifs et rapport."],
@@ -42326,8 +42416,8 @@ var TEXT = {
       ["\xC9crire les tests de paiement", "Ajoute des tests unitaires pour chargeCard, refund et les arrondis."]
     ],
     nested: ["Chercher les appels \xE0 toFixed", "Trouve tous les appels \xE0 toFixed() dans le d\xE9p\xF4t et liste-les."],
-    reviewer: ["Relecture finale", "Relis tout le diff du paiement, v\xE9rifie la coh\xE9rence et propose les derniers ajustements."],
-    reviewDone: "Relecture termin\xE9e : tout est coh\xE9rent.",
+    reviewer: ["Page de lancement et SEO", "\xC9cris la page de lancement du nouveau paiement : titre, accroche, mots-cl\xE9s SEO et texte de la newsletter."],
+    reviewDone: "Page de lancement pr\xEAte, mots-cl\xE9s SEO choisis.",
     reportDone: "Rapport livr\xE9.",
     migratePrompt: "Lance aussi la migration de la base.",
     migrate: ["Migrer la base de donn\xE9es", "Applique la migration 042 sur la base de d\xE9veloppement."],
@@ -42358,7 +42448,7 @@ var TEXT = {
       ["The explorers at work", "They read in parallel. An agent that finishes celebrates under confetti, then falls asleep: its room dims and shrinks."],
       ["Step 2: a workflow appears", "A second batch of agents in the same turn makes a workflow: the chief\u2019s room appears and its cables light up towards the running step."],
       ["An agent delegates too", "A sub-agent can launch its own agents: a purple dotted cable links the parent to the child."],
-      ["Step 3: review", "Last step: a Plan agent reviews everything. On its board, the chief tracks the steps (\u25A0 done, \u25B6 running)."],
+      ["Step 3: marketing", "An agent writes the launch page with a marketing skill: its room takes the look of its field (game, video, marketing\u2026). The chief tracks the steps (\u25A0 done, \u25B6 running)."],
       ["Context compaction", "The context gauge nears the limit: Claude compacts the conversation, a whirlwind passes and the gauge drops."],
       ["An agent crashes", "The agent running the migration hits a fatal error: shaking room, red alarm, toast. It stays visible for analysis."],
       ["Explicit workflow", "The [workflow:name step:n] marker groups agents by hand. Here, a two-step audit: four parallel audits, then fixes and a report."],
@@ -42383,8 +42473,8 @@ var TEXT = {
       ["Write payment tests", "Add unit tests for chargeCard, refund and rounding."]
     ],
     nested: ["Find toFixed calls", "Find every toFixed() call in the repo and list them."],
-    reviewer: ["Final review", "Review the whole payment diff, check consistency and suggest final tweaks."],
-    reviewDone: "Review done: everything is consistent.",
+    reviewer: ["Launch page and SEO", "Write the launch page of the new checkout: headline, hook, SEO keywords and the newsletter text."],
+    reviewDone: "Launch page ready, SEO keywords picked.",
     reportDone: "Report delivered.",
     migratePrompt: "Also run the database migration.",
     migrate: ["Migrate the database", "Apply migration 042 to the development database."],
@@ -42524,8 +42614,9 @@ async function tour(s, L) {
     13,
     group({ kind: "workflow", index: 0 }, { kind: "spawned" }),
     async () => {
-      const reviewer = await s.spawn(null, "Plan", L.reviewer[0], L.reviewer[1], opus);
-      await s.work(reviewer.agentId, opus, { reads: 3, edits: 1, done: L.reviewDone });
+      const writer = await s.spawn(null, "general-purpose", L.reviewer[0], L.reviewer[1], opus);
+      await s.toolCall(writer.agentId, "Skill", { skill: "marketing:copywriting" }, { ms: 700, response: { success: true, commandName: "marketing:copywriting" } });
+      await s.work(writer.agentId, opus, { reads: 2, writes: 1, done: L.reviewDone });
       mark(2, "completed");
       mark(3, "in_progress");
       await s.todos(null, plan);

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { animationFor, sharesList, type Agent, type FileChange, type Message, type Session, type ToolEvent } from '@dash/shared';
 import { t } from '../i18n/index.ts';
-import { agentFileChanges, agentLabel, agentTools, conversation, data, mascotSeed, useDash } from '../state.ts';
+import { agentDomain, agentFileChanges, agentLabel, agentTools, conversation, data, mascotSeed, useDash } from '../state.ts';
+import { DomainBadge } from './DomainBadge.tsx';
 import { basename, formatDuration, formatTime, formatTokens, modelBadge } from '../format.ts';
 import { MascotCanvas } from './MascotCanvas.tsx';
 import { TokenBreakdown } from './TokenBreakdown.tsx';
@@ -316,6 +317,7 @@ export function AgentPanel({ agent }: { agent: Agent }) {
             <StatusPill status={agent.status} />
             <span className="badge">{modelBadge(agent.model)}</span>
             <span className="badge ghost">{agent.kind === 'main' ? t.mainRoom : agent.type}</span>
+            <DomainBadge {...agentDomain(agent)} />
             {agent.currentTool && <span className="badge tool">{agent.currentTool} {agent.currentToolInputPreview ?? ''}</span>}
           </div>
           <div className="meta-row small muted">

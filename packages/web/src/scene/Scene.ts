@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
 import { animationFor, formatTokens, mulberry32, sharesList, type Agent, type Anim, type Message, type NarrationFocus, type Workflow } from '@dash/shared';
 import { t } from '../i18n/index.ts';
-import { activeStepIndex, agentLabel, data, isActive, isArchived, mascotSeed, sessionAgents, sessionWorkflows, useDash } from '../state.ts';
+import { activeStepIndex, agentDomain, agentLabel, data, isActive, isArchived, mascotSeed, sessionAgents, sessionWorkflows, useDash, workflowDomain } from '../state.ts';
 import { basename, formatDuration, modelBadge, preview } from '../format.ts';
 import { toolCategory, toolDisplayName } from '../tools.ts';
 import { computeLayout, levelTop, ROOM_X0, SHAFT_W, SHAFT_X, type SceneLayout, type Wire } from './layout.ts';
@@ -925,6 +925,7 @@ export class BaseScene {
       liveText: live,
       screenActive: isActive(a),
       steps: null,
+      domain: agentDomain(a).domain,
     };
   }
 
@@ -984,6 +985,7 @@ export class BaseScene {
       liveText: null,
       screenActive: false,
       steps,
+      domain: workflowDomain(w),
     };
   }
 
@@ -1021,6 +1023,7 @@ export class BaseScene {
       liveText: null,
       screenActive: false,
       steps: null,
+      domain: 'code',
     };
   }
 

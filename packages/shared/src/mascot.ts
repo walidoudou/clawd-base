@@ -5,8 +5,10 @@ export const CLAWD_ORANGE = '#D77757';
 
 export const ACCESSORIES = ['none', 'tophat', 'beanie', 'cap', 'glasses', 'headset', 'cape', 'bow', 'flower', 'scarf'] as const;
 export const CHIEF_ACCESSORIES = ['crown', 'chefhat'] as const;
+/** Only worn in a themed room (never picked at random). */
+export const DOMAIN_ACCESSORIES = ['hardhat', 'headphones', 'beret', 'shades', 'tie', 'visor', 'hood', 'pencil'] as const;
 export const DETAILS = ['none', 'blush', 'freckles', 'antenna', 'spot', 'sparkle'] as const;
-export type Accessory = (typeof ACCESSORIES)[number] | (typeof CHIEF_ACCESSORIES)[number];
+export type Accessory = (typeof ACCESSORIES)[number] | (typeof CHIEF_ACCESSORIES)[number] | (typeof DOMAIN_ACCESSORIES)[number];
 export type Detail = (typeof DETAILS)[number];
 
 export interface MascotLook {
@@ -134,6 +136,17 @@ const ACCESSORY_OVERLAYS: Record<Accessory, Overlay[]> = {
   flower: [{ dx: 2, dy: -3, rows: ['.w.', 'wYw', '.w.'] }],
   scarf: [{ dx: -6, dy: 5, rows: ['AAAAAAAAAAAA'] }, { dx: 3, dy: 6, rows: ['AA', 'aA'] }],
   crown: [{ dx: -5, dy: -3, rows: ['Y...YY...Y', 'YY.YRRY.YY', 'YYYYYYYYYY'] }],
+  hardhat: [{ dx: -6, dy: -4, rows: ['...YYYYYY...', '..YYYYwYYY..', '.YYYYYYYYYY.', 'YYYYYYYYYYYY'] }],
+  headphones: [
+    { dx: -5, dy: -3, rows: ['..aaaaaa..', '.a......a.'] },
+    { dx: -7, dy: -1, rows: ['a............a', 'AA..........AA', 'AA..........AA', 'AA..........AA'] },
+  ],
+  beret: [{ dx: -5, dy: -3, rows: ['....aa....', '.AAAAAAAA.', 'AAAAAAAAAa'] }],
+  shades: [{ dx: -6, dy: 1, rows: ['KKKKKKKKKKKK', '.KKKK..KKKK.', '..KK....KK..'] }],
+  tie: [{ dx: -2, dy: 6, rows: ['wAAw', '.AA.', '.Aa.', '.AA.'] }],
+  visor: [{ dx: -6, dy: 1, rows: ['KKKKKKKKKKKK', 'KAAAAAAAAAAK'] }],
+  hood: [{ dx: -7, dy: -2, rows: ['...aaaaaaaa...', '.aAAAAAAAAAAa.', 'aA..........Aa', 'aA..........Aa', 'aA..........Aa', 'aA..........Aa'], back: true }],
+  pencil: [{ dx: 5, dy: -3, rows: ['..K', '.Y.', 'Y..', 'P..'] }],
   chefhat: [{ dx: -5, dy: -4, rows: ['.wwwwwwww.', 'wwwwwwwwww', 'wwwwwwwwww', '.KKKKKKKK.'] }],
 };
 
@@ -263,4 +276,28 @@ export function propFor(tool: string | null): 'scroll' | 'keyboard' | 'console' 
   if (/^(Read|Grep|Glob|NotebookRead|WebFetch|WebSearch|LS)$/.test(tool)) return 'scroll';
   if (/^(Bash|PowerShell|BashOutput|KillShell|Monitor)$/.test(tool)) return 'console';
   return 'bubble';
+}
+
+/** Accessory worn in a room themed for a field of work (domain.ts), null = keep the mascot's own. */
+export const DOMAIN_ACCESSORY: Record<string, Accessory | null> = {
+  code: null,
+  game: 'headset',
+  marketing: 'shades',
+  business: 'tie',
+  video: 'beret',
+  design: 'pencil',
+  audio: 'headphones',
+  bot: 'visor',
+  data: 'glasses',
+  devops: 'hardhat',
+  security: 'hood',
+  web: 'cap',
+};
+
+/** The mascot dressed for its room's domain (colours and details stay its own). */
+export function withDomain(look: MascotLook, domain: string | null | undefined): MascotLook {
+  const accessory = domain ? DOMAIN_ACCESSORY[domain] : null;
+  if (!accessory || look.accessory === 'crown' || look.accessory === 'chefhat') return look;
+  const hat = ['hardhat', 'beret', 'cap', 'headphones', 'hood'].includes(accessory);
+  return { ...look, accessory, detail: hat && look.detail === 'antenna' ? 'blush' : look.detail };
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { stripWorkflowMarker } from '@dash/shared';
+import { DOMAINS, detectDomain, roomSignals, stripWorkflowMarker, type Domain, type DomainGuess } from '@dash/shared';
 import type { Agent, DashConfig, EntityKind, FileChange, LogEntry, Message, PatchBatch, Session, Snapshot, ToolEvent, Workflow } from '@dash/shared';
 import { t } from './i18n/index.ts';
 
@@ -398,4 +398,55 @@ export function isArchived(a: Agent, now: number): boolean {
   if (a.status === 'done') return now - a.endedAt > ARCHIVE_AFTER_MS;
   if (a.status === 'error') return now - a.endedAt > ARCHIVE_ERROR_AFTER_MS;
   return false;
+}
+
+// ───────────── field of work of each room (themed rooms) ─────────────
+
+const domainCache = new Map<string, { version: string; guess: DomainGuess }>();
+
+/** `?theme=game` shows every room with that theme (preview of the looks). */
+function forcedDomain(): Domain | null {
+  if (typeof location === 'undefined') return null;
+  const v = new URLSearchParams(location.search).get('theme');
+  return v && (DOMAINS as readonly string[]).includes(v) ? (v as Domain) : null;
+}
+
+/**
+ * What an agent's room is about (game dev, marketing…), from what it did so far. Recomputed only when
+ * its data changed; the previous answer is kept unless another field clearly wins (no flickering).
+ * Sub-agents start from their session's field.
+ */
+export function agentDomain(a: Agent): DomainGuess {
+  const forced = forcedDomain();
+  if (forced) return { domain: forced, reasons: [] };
+  const session = data.sessions.get(a.sessionId) ?? null;
+  const main = a.kind === 'sub' ? data.agents.get(a.sessionId) : undefined;
+  const prior: Domain | null = main ? agentDomain(main).domain : null;
+  const usage = a.kind === 'main' && session ? Math.round(Math.log2(1 + session.usageShares.total) * 2) : 0;
+  const version = [a.toolCount, Object.keys(a.files).length, a.prompt.length, a.description, a.type, a.turns, prior, session?.title, session?.lastPrompt?.length, usage].join('|');
+  const cached = domainCache.get(a.id);
+  if (cached && cached.version === version) return cached.guess;
+  const asked = conversation(a.sessionId, a.id).filter((m) => m.role === 'user').map((m) => m.text);
+  const guess = detectDomain(roomSignals({ agent: a, session, tools: agentTools(a.id), asked, prior }), cached?.guess.domain ?? null);
+  domainCache.set(a.id, { version, guess });
+  return guess;
+}
+
+/** A workflow's room takes the field most of its agents work in (its session's when it has none). */
+export function workflowDomain(w: Workflow): Domain {
+  const forced = forcedDomain();
+  if (forced) return forced;
+  const count = new Map<Domain, number>();
+  for (const step of w.steps)
+    for (const id of step.agentIds) {
+      const a = data.agents.get(id);
+      if (!a) continue;
+      const d = agentDomain(a).domain;
+      count.set(d, (count.get(d) ?? 0) + 1);
+    }
+  // Most agents' field; on a tie, a real field beats the default room.
+  const best = [...count.entries()].sort((x, y) => y[1] - x[1] || (x[0] === 'code' ? 1 : y[0] === 'code' ? -1 : 0))[0];
+  if (best) return best[0];
+  const main = data.agents.get(w.sessionId);
+  return main ? agentDomain(main).domain : 'code';
 }

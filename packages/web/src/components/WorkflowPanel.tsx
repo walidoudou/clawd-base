@@ -1,6 +1,7 @@
 import { sumUsage, type Workflow } from '@dash/shared';
 import { t } from '../i18n/index.ts';
-import { activeStepIndex, agentLabel, data, mascotSeed, useDash } from '../state.ts';
+import { activeStepIndex, agentLabel, data, mascotSeed, useDash, workflowDomain } from '../state.ts';
+import { DomainBadge } from './DomainBadge.tsx';
 import { formatDuration, formatTime, formatTokens, modelBadge, preview } from '../format.ts';
 import { MascotCanvas } from './MascotCanvas.tsx';
 import { TokenBreakdown } from './TokenBreakdown.tsx';
@@ -41,6 +42,7 @@ export function WorkflowPanel({ workflow }: { workflow: Workflow }) {
               {active >= 0 ? `${t.step} ${workflow.steps[active]?.index} — ${t.statusLabel.running}` : done ? t.statusLabel.done : t.statusLabel.idle}
             </span>
             <span className="badge ghost">{t.source[workflow.source]}</span>
+            <DomainBadge domain={workflowDomain(workflow)} />
           </div>
           <div className="meta-row small muted">
             {t.started} {formatTime(workflow.startedAt)} · {workflow.steps.length} {t.steps.toLowerCase()} · {agents.length} {t.agents.toLowerCase()} · <span className="add">+{added}</span>{' '}

@@ -289,7 +289,7 @@ const TEXT = {
       ['Les explorateurs travaillent', 'Ils lisent en parallèle. Un agent qui a fini fait la fête sous les confettis, puis s’endort : sa salle s’éteint et rétrécit.'],
       ['Étape 2 : un workflow apparaît', 'Un deuxième lot d’agents dans le même tour forme un workflow : la salle du chef apparaît et ses câbles s’allument vers l’étape en cours.'],
       ['Un agent délègue à son tour', 'Un sous-agent peut lancer ses propres agents : un câble violet en pointillés relie le parent à l’enfant.'],
-      ['Étape 3 : relecture', 'Dernière étape : un agent Plan relit le tout. Sur son tableau, le chef suit les étapes (■ terminée, ▶ en cours).'],
+      ['Étape 3 : le marketing', 'Un agent écrit la page de lancement avec un skill marketing : sa salle prend le décor de son domaine (jeu, vidéo, marketing…). Le chef suit les étapes (■ terminée, ▶ en cours).'],
       ['Le contexte se compacte', 'La jauge de contexte approche de la limite : Claude compacte la conversation, un tourbillon passe et la jauge redescend.'],
       ['Un agent plante', 'L’agent chargé de la migration rencontre une erreur fatale : salle secouée, alarme rouge, notification. Il reste visible pour l’analyse.'],
       ['Workflow explicite', 'Le marqueur [workflow:nom step:n] regroupe des agents à la main. Ici, un audit en deux étapes : quatre audits en parallèle, puis correctifs et rapport.'],
@@ -314,8 +314,8 @@ const TEXT = {
       ['Écrire les tests de paiement', 'Ajoute des tests unitaires pour chargeCard, refund et les arrondis.'],
     ],
     nested: ['Chercher les appels à toFixed', 'Trouve tous les appels à toFixed() dans le dépôt et liste-les.'],
-    reviewer: ['Relecture finale', 'Relis tout le diff du paiement, vérifie la cohérence et propose les derniers ajustements.'],
-    reviewDone: 'Relecture terminée : tout est cohérent.',
+    reviewer: ['Page de lancement et SEO', 'Écris la page de lancement du nouveau paiement : titre, accroche, mots-clés SEO et texte de la newsletter.'],
+    reviewDone: 'Page de lancement prête, mots-clés SEO choisis.',
     reportDone: 'Rapport livré.',
     migratePrompt: 'Lance aussi la migration de la base.',
     migrate: ['Migrer la base de données', 'Applique la migration 042 sur la base de développement.'],
@@ -346,7 +346,7 @@ const TEXT = {
       ['The explorers at work', 'They read in parallel. An agent that finishes celebrates under confetti, then falls asleep: its room dims and shrinks.'],
       ['Step 2: a workflow appears', 'A second batch of agents in the same turn makes a workflow: the chief’s room appears and its cables light up towards the running step.'],
       ['An agent delegates too', 'A sub-agent can launch its own agents: a purple dotted cable links the parent to the child.'],
-      ['Step 3: review', 'Last step: a Plan agent reviews everything. On its board, the chief tracks the steps (■ done, ▶ running).'],
+      ['Step 3: marketing', 'An agent writes the launch page with a marketing skill: its room takes the look of its field (game, video, marketing…). The chief tracks the steps (■ done, ▶ running).'],
       ['Context compaction', 'The context gauge nears the limit: Claude compacts the conversation, a whirlwind passes and the gauge drops.'],
       ['An agent crashes', 'The agent running the migration hits a fatal error: shaking room, red alarm, toast. It stays visible for analysis.'],
       ['Explicit workflow', 'The [workflow:name step:n] marker groups agents by hand. Here, a two-step audit: four parallel audits, then fixes and a report.'],
@@ -371,8 +371,8 @@ const TEXT = {
       ['Write payment tests', 'Add unit tests for chargeCard, refund and rounding.'],
     ],
     nested: ['Find toFixed calls', 'Find every toFixed() call in the repo and list them.'],
-    reviewer: ['Final review', 'Review the whole payment diff, check consistency and suggest final tweaks.'],
-    reviewDone: 'Review done: everything is consistent.',
+    reviewer: ['Launch page and SEO', 'Write the launch page of the new checkout: headline, hook, SEO keywords and the newsletter text.'],
+    reviewDone: 'Launch page ready, SEO keywords picked.',
     reportDone: 'Report delivered.',
     migratePrompt: 'Also run the database migration.',
     migrate: ['Migrate the database', 'Apply migration 042 to the development database.'],
@@ -540,8 +540,10 @@ async function tour(s: Sim, L: (typeof TEXT)[DemoLocale]): Promise<void> {
     13,
     group({ kind: 'workflow', index: 0 }, { kind: 'spawned' }),
     async () => {
-      const reviewer = await s.spawn(null, 'Plan', L.reviewer[0], L.reviewer[1], opus);
-      await s.work(reviewer.agentId, opus, { reads: 3, edits: 1, done: L.reviewDone });
+      // A marketing agent: its room turns into a marketing office (skill + launch / SEO wording).
+      const writer = await s.spawn(null, 'general-purpose', L.reviewer[0], L.reviewer[1], opus);
+      await s.toolCall(writer.agentId, 'Skill', { skill: 'marketing:copywriting' }, { ms: 700, response: { success: true, commandName: 'marketing:copywriting' } });
+      await s.work(writer.agentId, opus, { reads: 2, writes: 1, done: L.reviewDone });
       mark(2, 'completed');
       mark(3, 'in_progress');
       await s.todos(null, plan);

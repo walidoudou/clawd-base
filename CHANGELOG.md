@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+
+- Themed rooms: the main room, each agent room and each workflow room takes the look of the field it works in — game dev (UEFN, Roblox, Unity…), marketing, business, video, design, audio, Discord bots, data/AI, DevOps, security, web. Each field has its own walls, floor and furniture, an animated desk screen (mini game, rising bars, timeline, waveform, radar…) and an animated object (arcade cabinet, REC light, server LEDs…); mascots wear a matching accessory (gamer headset, beret, hard hat, headphones…) and hold the field's tool while they edit (gamepad, clapperboard, microphone…). A room that changes field is refitted in a cloud of dust.
+- The field is guessed on the machine, from what the dashboard already sees: MCP servers and skills (weighted by their share of the usage), plugin agent types, files touched, shell commands, project folder and prompt words; it only switches when another field clearly wins. Sub-agents start from their session's field; workflows take most of their agents' field. The panel shows the field and its clues; `?theme=<field>` previews a look on every room.
+- Guided demo: a launch page / SEO agent gets a marketing room.
+
 ## 1.3.0
 
 - Usage like Claude Code's `/usage`, per session: the share of the session's usage that went to each skill, sub-agent, plugin and MCP server, from the attribution Claude Code writes in transcripts and with the same weighting (token prices × model tier); also the share spent above 150k context, by sub-agents, on cache misses, and the latest `/context` breakdown (system prompt, MCP tools, skills, agents, messages…). Shown in the main room's panel; the room's board shows the top consumers.

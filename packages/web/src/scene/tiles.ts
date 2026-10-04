@@ -90,20 +90,21 @@ export function makeCanvas(w: number, h: number): { canvas: HTMLCanvasElement; c
 
 // ───────────── base tiles ─────────────
 
-function wallTile(ctx: Ctx, x: number, y: number, rng: () => number, tint: 'purple' | 'teal' | 'warm'): void {
-  const [a, b] = tint === 'teal' ? ['#26343d', '#22303a'] : tint === 'warm' ? ['#3d2f33', '#36292d'] : [PAL.wallA, PAL.wallB];
+function wallTile(ctx: Ctx, x: number, y: number, rng: () => number, tint: 'purple' | 'teal' | 'warm', th?: RoomTheme): void {
+  const [a, b] = th?.wall ?? (tint === 'teal' ? ['#26343d', '#22303a'] : tint === 'warm' ? ['#3d2f33', '#36292d'] : [PAL.wallA, PAL.wallB]);
   rect(ctx, x, y, TILE, TILE, a);
   for (let i = 0; i < TILE; i += 4) rect(ctx, x + i, y, 2, TILE, b);
   if (rng() < 0.06) rect(ctx, x + 6, y + 6, 2, 2, PAL.wallTrim);
 }
 
-function floorTile(ctx: Ctx, x: number, y: number, rng: () => number): void {
-  rect(ctx, x, y, TILE, TILE, (Math.floor(x / TILE) + Math.floor(y / TILE)) % 2 ? PAL.floorA : PAL.floorB);
-  for (let i = 0; i < TILE; i += 4) rect(ctx, x, y + i, TILE, 1, PAL.floorLine);
+function floorTile(ctx: Ctx, x: number, y: number, rng: () => number, th?: RoomTheme): void {
+  const [fa, fb, line, shine] = th?.floor ?? [PAL.floorA, PAL.floorB, PAL.floorLine, PAL.floorShine];
+  rect(ctx, x, y, TILE, TILE, (Math.floor(x / TILE) + Math.floor(y / TILE)) % 2 ? fa : fb);
+  for (let i = 0; i < TILE; i += 4) rect(ctx, x, y + i, TILE, 1, line);
   const off = Math.floor(rng() * 12);
-  rect(ctx, x + off, y + 1, 1, 3, PAL.floorLine);
-  rect(ctx, x + ((off + 7) % 16), y + 5, 1, 3, PAL.floorLine);
-  rect(ctx, x + 2, y + 2, 3, 1, PAL.floorShine);
+  rect(ctx, x + off, y + 1, 1, 3, line);
+  rect(ctx, x + ((off + 7) % 16), y + 5, 1, 3, line);
+  rect(ctx, x + 2, y + 2, 3, 1, shine);
 }
 
 function metalFloorTile(ctx: Ctx, x: number, y: number): void {
@@ -199,7 +200,7 @@ export function drawHut(): HTMLCanvasElement {
 
 // ───────────── props ─────────────
 
-function plant(ctx: Ctx, x: number, floorY: number, big = false): void {
+export function plant(ctx: Ctx, x: number, floorY: number, big = false): void {
   const h = big ? 22 : 14;
   rect(ctx, x + 2, floorY - 7, 10, 7, PAL.plantPot);
   rect(ctx, x + 1, floorY - 8, 12, 2, '#c97a52');
@@ -294,10 +295,11 @@ function hangingLamp(ctx: Ctx, x: number, top: number): void {
   for (let i = 0; i < 30; i++) ctx.fillRect(x + 4 - i, top + 13 + i * 2, 1 + i * 2, 2);
 }
 
-function rug(ctx: Ctx, x: number, floorY: number, w: number): void {
-  rect(ctx, x, floorY + 2, w, 5, PAL.rug);
-  rect(ctx, x, floorY + 2, w, 1, PAL.rugEdge);
-  for (let i = x + 2; i < x + w - 2; i += 4) rect(ctx, i, floorY + 4, 2, 1, PAL.rugEdge);
+function rug(ctx: Ctx, x: number, floorY: number, w: number, th?: RoomTheme): void {
+  const [c, edge] = th?.rug ?? [PAL.rug, PAL.rugEdge];
+  rect(ctx, x, floorY + 2, w, 5, c);
+  rect(ctx, x, floorY + 2, w, 1, edge);
+  for (let i = x + 2; i < x + w - 2; i += 4) rect(ctx, i, floorY + 4, 2, 1, edge);
 }
 
 function couch(ctx: Ctx, x: number, floorY: number): void {
@@ -329,6 +331,28 @@ export type AgentRoomKind = 'main' | 'agent' | 'compact' | 'chief';
 export type FillerKind = 'servers' | 'storage' | 'garden' | 'generator' | 'kitchen';
 export type RoomKind = AgentRoomKind | `filler-${FillerKind}`;
 
+/**
+ * Look of a room for one field of work (see themes.ts): colours and the objects that replace the
+ * default shelves, poster, rack and plant. Same slots in every room kind, so the board, plaque and
+ * stations never move.
+ */
+export interface RoomTheme {
+  wall: [string, string];
+  /** Two tile colours, joint line, shine. */
+  floor: [string, string, string, string];
+  rug: [string, string];
+  /** Left wall, in a box of about w × 30 px from (x, y). */
+  wallDecor(ctx: Ctx, x: number, y: number, w: number, rng: () => number): void;
+  /** 18 × 22 frame. */
+  poster(ctx: Ctx, x: number, y: number): void;
+  /** Small object on the desk, about 14 px wide, standing on `top`. */
+  deskProp(ctx: Ctx, x: number, top: number): void;
+  /** Big object at the "bash" station, 26 × 44 standing on the floor. */
+  side(ctx: Ctx, x: number, floorY: number): void;
+  /** Small floor object, about 14 px wide. */
+  corner(ctx: Ctx, x: number, floorY: number): void;
+}
+
 export interface Stations {
   /** x where the mascot stands for each activity (bottom-center anchor). */
   read: number;
@@ -351,6 +375,8 @@ export interface RoomGeometry {
   screen: { x: number; y: number; w: number; h: number } | null;
   lamp: { x: number; y: number };
   footer: { x: number; y: number };
+  /** x of the big object at the bash station (themed rooms animate it), null when there is none. */
+  sideX: number | null;
 }
 
 export const ROOM_WIDTH: Record<AgentRoomKind, number> = { main: 448, chief: 448, agent: 352, compact: 176 };
@@ -367,6 +393,7 @@ export function roomGeometry(kind: RoomKind, width?: number): RoomGeometry {
         screen: { x: 86, y: floorY - 38, w: 22, h: 11 },
         lamp: { x: 434, y: 14 },
         footer: { x: 8, y: ROOM_H - 15 },
+        sideX: 146,
       };
     case 'chief':
       return {
@@ -377,6 +404,7 @@ export function roomGeometry(kind: RoomKind, width?: number): RoomGeometry {
         screen: null,
         lamp: { x: 434, y: 14 },
         footer: { x: 8, y: ROOM_H - 15 },
+        sideX: null,
       };
     case 'compact':
       return {
@@ -387,6 +415,7 @@ export function roomGeometry(kind: RoomKind, width?: number): RoomGeometry {
         screen: { x: 26, y: floorY - 38, w: 18, h: 9 },
         lamp: { x: 162, y: 30 },
         footer: { x: 66, y: 46 + WALL },
+        sideX: null,
       };
     case 'agent':
       return {
@@ -397,6 +426,7 @@ export function roomGeometry(kind: RoomKind, width?: number): RoomGeometry {
         screen: { x: 70, y: floorY - 38, w: 22, h: 11 },
         lamp: { x: 342, y: 14 },
         footer: { x: 6, y: ROOM_H - 15 },
+        sideX: 124,
       };
     default: {
       const w = width ?? 160;
@@ -408,18 +438,19 @@ export function roomGeometry(kind: RoomKind, width?: number): RoomGeometry {
         screen: null,
         lamp: { x: w - 14, y: 14 },
         footer: { x: 6, y: ROOM_H - 15 },
+        sideX: null,
       };
     }
   }
 }
 
-function roomShell(ctx: Ctx, w: number, rng: () => number, tint: 'purple' | 'teal' | 'warm', metal = false): void {
-  for (let y = 0; y < FLOOR_Y; y += TILE) for (let x = 0; x < w; x += TILE) wallTile(ctx, x, y, rng, tint);
+function roomShell(ctx: Ctx, w: number, rng: () => number, tint: 'purple' | 'teal' | 'warm', metal = false, th?: RoomTheme): void {
+  for (let y = 0; y < FLOOR_Y; y += TILE) for (let x = 0; x < w; x += TILE) wallTile(ctx, x, y, rng, tint, th);
   rect(ctx, 0, 0, w, 4, PAL.ceiling);
   pipes(ctx, w);
   rect(ctx, 0, FLOOR_Y - 3, w, 3, PAL.baseboard);
-  for (let y = FLOOR_Y; y < ROOM_H; y += TILE) for (let x = 0; x < w; x += TILE) (metal ? metalFloorTile(ctx, x, y) : floorTile(ctx, x, y, rng));
-  rect(ctx, 0, FLOOR_Y, w, 1, metal ? PAL.metal : PAL.floorShine);
+  for (let y = FLOOR_Y; y < ROOM_H; y += TILE) for (let x = 0; x < w; x += TILE) (metal && !th ? metalFloorTile(ctx, x, y) : floorTile(ctx, x, y, rng, th));
+  rect(ctx, 0, FLOOR_Y, w, 1, th ? th.floor[3] : metal ? PAL.metal : PAL.floorShine);
 }
 
 function plaqueFrame(ctx: Ctx, g: RoomGeometry): void {
@@ -442,47 +473,63 @@ function outline(ctx: Ctx, w: number, h: number): void {
   ctx.strokeRect(1, 1, w - 2, h - 2);
 }
 
-/** Static room background — cached per kind + seed. */
-export function drawRoom(kind: RoomKind, seedKey: string, width?: number): HTMLCanvasElement {
+/** Static room background — cached per kind + seed (+ theme). */
+export function drawRoom(kind: RoomKind, seedKey: string, width?: number, th?: RoomTheme): HTMLCanvasElement {
   const g = roomGeometry(kind, width);
   const { canvas, ctx } = makeCanvas(g.w, g.h);
   const rng = mulberry32(hashString(`${kind}:${seedKey}`));
   const F = g.floorY;
 
   if (kind === 'main') {
-    roomShell(ctx, g.w, rng, 'warm');
-    wallShelf(ctx, 8, 40 + WALL, 60, rng);
-    wallShelf(ctx, 8, 64 + WALL, 48, rng);
+    roomShell(ctx, g.w, rng, 'warm', false, th);
+    if (th) th.wallDecor(ctx, 8, 40 + WALL, 64, rng);
+    else {
+      wallShelf(ctx, 8, 40 + WALL, 60, rng);
+      wallShelf(ctx, 8, 64 + WALL, 48, rng);
+    }
     hangingLamp(ctx, 120, 4);
-    poster(ctx, 128, 44 + WALL);
+    (th ? th.poster : poster)(ctx, 128, 44 + WALL);
     clock(ctx, 166, 46 + WALL);
-    rug(ctx, 50, F, 120);
+    rug(ctx, 50, F, 120, th);
     desk(ctx, 62, F, 70);
     monitor(ctx, 84, F - 22);
-    terminalRack(ctx, 146, F);
-    plant(ctx, 178, F, true);
+    th?.deskProp(ctx, 114, F - 22);
+    (th ? th.side : terminalRack)(ctx, 146, F);
+    if (th) th.corner(ctx, 178, F);
+    else plant(ctx, 178, F, true);
     door(ctx, 426, F);
   } else if (kind === 'chief') {
-    roomShell(ctx, g.w, rng, 'purple', true);
+    roomShell(ctx, g.w, rng, 'purple', true, th);
+    th?.wallDecor(ctx, 14, 52, 60, rng);
     hangingLamp(ctx, 56, 4);
-    rug(ctx, 16, F, 92);
+    rug(ctx, 16, F, 92, th);
     podium(ctx, 34, F, 54);
-    plant(ctx, 4, F, true);
-    plant(ctx, 100, F);
+    if (th) {
+      th.corner(ctx, 4, F);
+      th.corner(ctx, 100, F);
+    } else {
+      plant(ctx, 4, F, true);
+      plant(ctx, 100, F);
+    }
   } else if (kind === 'compact') {
-    roomShell(ctx, g.w, rng, 'purple');
+    roomShell(ctx, g.w, rng, 'purple', false, th);
     desk(ctx, 10, F, 52);
     monitor(ctx, 22, F - 22);
-    plant(ctx, 158, F);
+    th?.deskProp(ctx, 48, F - 22);
+    if (th) th.corner(ctx, 158, F);
+    else plant(ctx, 158, F);
   } else if (kind === 'agent') {
-    roomShell(ctx, g.w, rng, rng() < 0.5 ? 'purple' : 'teal');
-    wallShelf(ctx, 6, 44 + WALL, 52, rng);
+    roomShell(ctx, g.w, rng, rng() < 0.5 ? 'purple' : 'teal', false, th);
+    if (th) th.wallDecor(ctx, 6, 44 + WALL, 56, rng);
+    else wallShelf(ctx, 6, 44 + WALL, 52, rng);
     hangingLamp(ctx, 76, 4);
-    rug(ctx, 40, F, 76);
+    rug(ctx, 40, F, 76, th);
     desk(ctx, 48, F, 66);
     monitor(ctx, 68, F - 22);
-    terminalRack(ctx, 124, F);
-    if (rng() < 0.6) plant(ctx, 6, F);
+    th?.deskProp(ctx, 98, F - 22);
+    (th ? th.side : terminalRack)(ctx, 124, F);
+    if (th) th.corner(ctx, 158, F);
+    else if (rng() < 0.6) plant(ctx, 6, F);
   } else {
     drawFiller(ctx, kind.slice(7) as FillerKind, g, rng);
   }

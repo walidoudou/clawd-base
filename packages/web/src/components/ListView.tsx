@@ -1,6 +1,7 @@
 import { animationFor, type Agent } from '@dash/shared';
 import { t, intlLocale } from '../i18n/index.ts';
-import { agentLabel, data, mascotSeed, sessionAgents, sessionWorkflows, useDash } from '../state.ts';
+import { agentDomain, agentLabel, data, mascotSeed, sessionAgents, sessionWorkflows, useDash } from '../state.ts';
+import { DOMAIN_ICON } from './DomainBadge.tsx';
 import { basename, modelBadge, preview } from '../format.ts';
 import { MascotCanvas } from './MascotCanvas.tsx';
 import { TokenChips } from './TokenBreakdown.tsx';
@@ -14,7 +15,9 @@ function AgentCard({ a }: { a: Agent }) {
       <div className="card-top">
         <MascotCanvas id={mascotSeed(a)} canonical={a.kind === 'main'} anim={animationFor(a, Date.now(), a.endedAt)} scale={3} />
         <div className="card-head">
-          <strong>{a.kind === 'main' ? t.mainRoom : agentLabel(a)}</strong>
+          <strong>
+            {a.kind === 'main' ? t.mainRoom : agentLabel(a)} <span title={t.domainName[agentDomain(a).domain]}>{DOMAIN_ICON[agentDomain(a).domain]}</span>
+          </strong>
           <span className="small muted">
             {a.kind === 'main' ? '' : `${a.type} · `}
             {modelBadge(a.model)} · <span className={`st-text-${a.status}`}>{t.statusLabel[a.status]}</span>
