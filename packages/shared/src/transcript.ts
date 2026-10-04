@@ -175,10 +175,17 @@ export class TranscriptParser {
       default:
         break;
     }
-    // /context writes the exact window the usage is measured against.
+    // /context writes the exact window the usage is measured against, and what fills it.
     const usage = obj(o['contextUsage']);
     if (usage && typeof usage['raw_max_tokens'] === 'number' && usage['raw_max_tokens'] > 0) {
-      out.push({ ...base, kind: 'context.window', agentId, window: usage['raw_max_tokens'] as number });
+      const window = usage['raw_max_tokens'] as number;
+      out.push({ ...base, kind: 'context.window', agentId, window });
+      const categories = (Array.isArray(usage['categories']) ? usage['categories'] : [])
+        .map(obj)
+        .filter((c): c is Obj => !!c && c['kind'] === 'used' && typeof c['name'] === 'string' && typeof c['tokens'] === 'number' && c['tokens'] > 0)
+        .map((c) => ({ name: c['name'] as string, tokens: c['tokens'] as number }));
+      const total = typeof usage['total_tokens'] === 'number' ? usage['total_tokens'] : categories.reduce((n, c) => n + c.tokens, 0);
+      out.push({ ...base, kind: 'context.usage', agentId, usage: { at: base.at, total, window, categories } });
     }
     return out;
   }
@@ -257,7 +264,12 @@ export class TranscriptParser {
     // Synthetic messages ("No response requested.", model "<synthetic>") carry an all-zero usage:
     // counting it would reset the context gauge to 0.
     if (usage && usage.total > 0 && model !== '<synthetic>' && messageId && o['isApiErrorMessage'] !== true) {
-      out.push({ ...base, kind: 'usage', agentId, messageId, model, usage });
+      // Claude Code attributes each request to the skill, sub-agent, plugin or MCP server behind it.
+      const attribution =
+        o['attributionAgent'] || o['attributionSkill'] || o['attributionPlugin'] || o['attributionMcpServer']
+          ? { agent: str(o['attributionAgent']), skill: str(o['attributionSkill']), plugin: str(o['attributionPlugin']), mcpServer: str(o['attributionMcpServer']) }
+          : null;
+      out.push({ ...base, kind: 'usage', agentId, messageId, model, usage, attribution });
     }
     if (msg['stop_reason'] === 'end_turn') {
       out.push({ ...base, kind: 'turn.end', agentId, lastMessage: this.lastText });
@@ -370,7 +382,8 @@ export function eventsFromAgentMeta(sessionId: string, agentId: string, meta: un
 /** Derive (sessionId, agentId) from a transcript path. */
 export function identifyTranscript(path: string): { sessionId: string; agentId: string | null; kind: 'main' | 'subagent' | 'meta' } | null {
   const norm = path.replace(/\\/g, '/');
-  const sub = /\/([0-9a-f-]{36})\/subagents\/agent-([^/]+?)\.(jsonl|meta\.json)$/i.exec(norm);
+  // Agents of the native Workflow tool live in subagents/workflows/<runId>/.
+  const sub = /\/([0-9a-f-]{36})\/subagents\/(?:workflows\/[^/]+\/)?agent-([^/]+?)\.(jsonl|meta\.json)$/i.exec(norm);
   if (sub) return { sessionId: sub[1] as string, agentId: sub[2] as string, kind: sub[3] === 'jsonl' ? 'subagent' : 'meta' };
   const main = /\/([0-9a-f-]{36})\.jsonl$/i.exec(norm);
   if (main) return { sessionId: main[1] as string, agentId: null, kind: 'main' };

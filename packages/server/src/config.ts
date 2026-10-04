@@ -19,7 +19,7 @@ export interface ServerConfig {
 }
 
 export const APP_ID = 'clawd-base';
-export const VERSION = '1.2.0';
+export const VERSION = '1.3.0';
 export const DEFAULT_PORT = 4317;
 
 /** Environment variable `CLAWD_BASE_<name>` (legacy `CLAUDE_DASH_<name>` still accepted). */

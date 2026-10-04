@@ -18,7 +18,7 @@ interface FileState {
 
 const CHUNK = 1024 * 1024;
 /** Directory levels below projectsDir (chokidar `depth`, and the rescan). */
-const DEPTH = 4;
+const DEPTH = 5;
 /** Claude Code keeps more than transcripts there; tested on the path relative to projectsDir. */
 const SKIPPED_DIRS = /(^|\/)(tool-results|memory|tasks|file-history)(\/|$)/;
 

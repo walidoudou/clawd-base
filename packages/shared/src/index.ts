@@ -2,6 +2,7 @@ export * from './types.ts';
 export * from './events.ts';
 export * from './protocol.ts';
 export * from './usage.ts';
+export * from './consumption.ts';
 export * from './truncate.ts';
 export * from './diff.ts';
 export * from './transcript.ts';

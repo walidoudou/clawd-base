@@ -37052,6 +37052,41 @@ function contextWindowFor(model) {
   return WINDOW_200K;
 }
 
+// packages/shared/src/consumption.ts
+function modelTier(model) {
+  const m = model?.toLowerCase() ?? "";
+  if (!m) return 3;
+  if (m.includes("fable")) return 10;
+  if (m.includes("opus")) return 5;
+  if (m.includes("haiku")) return 1;
+  return 3;
+}
+function requestCost(u, model) {
+  return (u.cacheRead + u.input * 10 + u.cacheCreate * 12.5 + u.output * 50) * modelTier(model);
+}
+function emptyShares() {
+  return { total: 0, subagents: 0, longContext: 0, cacheMiss: 0, agents: {}, skills: {}, plugins: {}, mcpServers: {} };
+}
+function bump(m, key, n) {
+  if (!key) return;
+  const v = (m[key] ?? 0) + n;
+  if (v > 1e-6) m[key] = v;
+  else delete m[key];
+}
+function addRequest(s, r, sign) {
+  const cost = requestCost(r.usage, r.model) * sign;
+  s.total += cost;
+  if (r.sub) s.subagents += cost;
+  if (r.usage.input + r.usage.cacheCreate + r.usage.cacheRead > 15e4) s.longContext += cost;
+  if (r.usage.input > 1e5) s.cacheMiss += cost;
+  const a = r.attribution;
+  if (!a) return;
+  if (a.agent) bump(s.agents, a.skill ?? a.agent, cost);
+  else bump(s.skills, a.skill, cost);
+  bump(s.plugins, a.plugin, cost);
+  bump(s.mcpServers, a.mcpServer, cost);
+}
+
 // packages/shared/src/truncate.ts
 var LIMITS = {
   toolOutputChars: 4e3,
@@ -37745,7 +37780,11 @@ var TranscriptParser = class {
     }
     const usage = obj(o["contextUsage"]);
     if (usage && typeof usage["raw_max_tokens"] === "number" && usage["raw_max_tokens"] > 0) {
-      out.push({ ...base, kind: "context.window", agentId, window: usage["raw_max_tokens"] });
+      const window = usage["raw_max_tokens"];
+      out.push({ ...base, kind: "context.window", agentId, window });
+      const categories = (Array.isArray(usage["categories"]) ? usage["categories"] : []).map(obj).filter((c) => !!c && c["kind"] === "used" && typeof c["name"] === "string" && typeof c["tokens"] === "number" && c["tokens"] > 0).map((c) => ({ name: c["name"], tokens: c["tokens"] }));
+      const total = typeof usage["total_tokens"] === "number" ? usage["total_tokens"] : categories.reduce((n, c) => n + c.tokens, 0);
+      out.push({ ...base, kind: "context.usage", agentId, usage: { at: base.at, total, window, categories } });
     }
     return out;
   }
@@ -37818,7 +37857,8 @@ var TranscriptParser = class {
     }
     const usage = usageFromApi(msg["usage"]);
     if (usage && usage.total > 0 && model !== "<synthetic>" && messageId && o["isApiErrorMessage"] !== true) {
-      out.push({ ...base, kind: "usage", agentId, messageId, model, usage });
+      const attribution = o["attributionAgent"] || o["attributionSkill"] || o["attributionPlugin"] || o["attributionMcpServer"] ? { agent: str2(o["attributionAgent"]), skill: str2(o["attributionSkill"]), plugin: str2(o["attributionPlugin"]), mcpServer: str2(o["attributionMcpServer"]) } : null;
+      out.push({ ...base, kind: "usage", agentId, messageId, model, usage, attribution });
     }
     if (msg["stop_reason"] === "end_turn") {
       out.push({ ...base, kind: "turn.end", agentId, lastMessage: this.lastText });
@@ -37917,7 +37957,7 @@ function eventsFromAgentMeta(sessionId, agentId, meta, at) {
 }
 function identifyTranscript(path) {
   const norm = path.replace(/\\/g, "/");
-  const sub = /\/([0-9a-f-]{36})\/subagents\/agent-([^/]+?)\.(jsonl|meta\.json)$/i.exec(norm);
+  const sub = /\/([0-9a-f-]{36})\/subagents\/(?:workflows\/[^/]+\/)?agent-([^/]+?)\.(jsonl|meta\.json)$/i.exec(norm);
   if (sub) return { sessionId: sub[1], agentId: sub[2], kind: sub[3] === "jsonl" ? "subagent" : "meta" };
   const main2 = /\/([0-9a-f-]{36})\.jsonl$/i.exec(norm);
   if (main2) return { sessionId: main2[1], agentId: null, kind: "main" };
@@ -38255,6 +38295,8 @@ var StateStore = class {
   dequeued = /* @__PURE__ */ new Set();
   /** Context window set by an authoritative source (model identity, /context): wins over the model guess. */
   pinnedWindow = /* @__PURE__ */ new Map();
+  /** Requests already counted in each session's usage shares, by message id (replays must not double them). */
+  charged = /* @__PURE__ */ new Map();
   dirty = /* @__PURE__ */ new Map();
   removals = /* @__PURE__ */ new Map();
   pendingLogs = [];
@@ -38350,6 +38392,8 @@ var StateStore = class {
         usageTimeline: { start: Math.floor(at / MINUTE) * MINUTE, buckets: [] },
         contextWindow: WINDOW_200K,
         tasks: [],
+        usageShares: emptyShares(),
+        contextUsage: null,
         narration: null
       };
       this.sessions.set(id, s);
@@ -38540,6 +38584,7 @@ var StateStore = class {
       this.remove("message", mid);
     }
     this.messageQueue.delete(id);
+    this.charged.delete(id);
     for (const [tu, holder] of this.spawns) if (agentIds.has(holder)) this.spawns.delete(tu);
     for (const [k, v] of this.tools) if (v.sessionId === id) {
       this.tools.delete(k);
@@ -38917,6 +38962,9 @@ var StateStore = class {
         this.mark("agent", a.id);
         break;
       }
+      case "context.usage":
+        if (!s.contextUsage || ev.usage.at >= s.contextUsage.at) s.contextUsage = ev.usage;
+        break;
       case "usage": {
         const a = this.ensureAgent(s.id, ev.agentId, ev.at);
         this.revive(a, ev.at);
@@ -38924,6 +38972,13 @@ var StateStore = class {
         if (delta) {
           a.usage = this.ledger(a.id).total;
           this.addToTimeline(s, ev.at, delta.total);
+          let reqs = this.charged.get(s.id);
+          if (!reqs) this.charged.set(s.id, reqs = /* @__PURE__ */ new Map());
+          const prev = reqs.get(ev.messageId);
+          const req = { usage: ev.usage, model: ev.model ?? prev?.model ?? null, sub: a.kind === "sub", attribution: ev.attribution ?? prev?.attribution ?? null };
+          if (prev) addRequest(s.usageShares, prev, -1);
+          addRequest(s.usageShares, req, 1);
+          reqs.set(ev.messageId, req);
         }
         if (ev.at >= a.contextAt) {
           a.contextAt = ev.at;
@@ -39466,7 +39521,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 var APP_ID = "clawd-base";
-var VERSION = "1.2.0";
+var VERSION = "1.3.0";
 var DEFAULT_PORT = 4317;
 function env(name) {
   return process.env[`CLAWD_BASE_${name}`] ?? process.env[`CLAUDE_DASH_${name}`];
@@ -41593,7 +41648,7 @@ function watch(paths, options = {}) {
 
 // packages/server/src/watcher.ts
 var CHUNK = 1024 * 1024;
-var DEPTH = 4;
+var DEPTH = 5;
 var SKIPPED_DIRS = /(^|\/)(tool-results|memory|tasks|file-history)(\/|$)/;
 var isTranscriptName = (p) => p.endsWith(".jsonl") || p.endsWith(".meta.json");
 var KIND_ORDER = { main: 0, meta: 1, subagent: 2 };
@@ -42042,6 +42097,8 @@ var Sim = class {
   msg = 0;
   /** Main thread context, grows with the session (for the gauge and the compaction). */
   context = 18e3;
+  /** Sub-agent types, for the usage attribution Claude Code writes on their requests. */
+  agentTypes = /* @__PURE__ */ new Map();
   /** Demo time slept so far (ms, unaffected by speed and pauses): paces the narration. */
   demoTime = 0;
   async sleep(ms) {
@@ -42092,8 +42149,10 @@ var Sim = class {
   reply(agentId, text) {
     return this.events([{ kind: "assistant.text", sessionId: this.sessionId, at: Date.now(), source: "sim", agentId: agentId ?? this.sessionId, text }]);
   }
-  /** One assistant message worth of token usage. */
-  usage(agentId, model, scale = 1) {
+  /** One assistant message worth of token usage (attributed like Claude Code does: sub-agent type, skill, MCP server). */
+  usage(agentId, model, scale = 1, attribution = {}) {
+    const agent = agentId ? this.agentTypes.get(agentId) ?? null : null;
+    const attr = { agent, skill: null, plugin: null, mcpServer: null, ...attribution };
     const main2 = agentId === null;
     const cacheRead = main2 ? this.context += rnd(2500, 7e3) : Math.round(rnd(12e3, 6e4) * scale);
     return this.events([
@@ -42105,7 +42164,8 @@ var Sim = class {
         agentId: agentId ?? this.sessionId,
         messageId: `msg_sim_${this.tag}_${++this.msg}`,
         model,
-        usage: makeUsage(rnd(1, 40), Math.round(rnd(120, 900) * scale), rnd(0, 1) ? rnd(2e3, 12e3) : 0, cacheRead)
+        usage: makeUsage(rnd(1, 40), Math.round(rnd(120, 900) * scale), rnd(0, 1) ? rnd(2e3, 12e3) : 0, cacheRead),
+        attribution: attr.agent || attr.skill || attr.plugin || attr.mcpServer ? attr : null
       }
     ]);
   }
@@ -42171,6 +42231,7 @@ var Sim = class {
   async spawn(parent, type, description, prompt, model) {
     const toolUseId = `toolu_sim_${this.tag}_${++this.tool}`;
     const agentId = `a${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    this.agentTypes.set(agentId, type);
     await this.hook("PreToolUse", parent, { tool_name: "Agent", tool_use_id: toolUseId, tool_input: { subagent_type: type, description, prompt, model } });
     await this.sleep(rnd(200, 500));
     await this.hook("SubagentStart", null, { agent_id: agentId, agent_type: type });
@@ -42393,10 +42454,10 @@ async function tour(s, L) {
   });
   await step(4, main2, async () => {
     await s.read(null, "src/payment/stripe.ts");
-    await s.usage(null, opus);
+    await s.usage(null, opus, 1, { skill: "toolkit:debug", plugin: "toolkit" });
     await s.read(null, "src/lib/money.ts");
     await s.toolCall(null, "Grep", { pattern: "chargeCard", path: L.cwd }, { ms: 1500 });
-    await s.usage(null, opus);
+    await s.usage(null, opus, 1, { skill: "toolkit:debug", plugin: "toolkit" });
   });
   await step(5, main2, async () => {
     mark(0, "completed");
@@ -42415,7 +42476,7 @@ async function tour(s, L) {
   await step(8, main2, async () => {
     await s.edit(null, "src/lib/money.ts");
     await s.bash(null, "npm test -- payment");
-    await s.usage(null, opus);
+    await s.usage(null, opus, 1, { mcpServer: "browser" });
     mark(1, "completed");
     mark(2, "in_progress");
     await s.todos(null, plan);

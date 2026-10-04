@@ -20,6 +20,7 @@
 - **Live** — hooks give instant events; transcripts (`~/.claude/projects/**.jsonl`) give tokens, models and sub-agent activity, and keep the dashboard working even without hooks.
 - **Sub-agents & workflows** — every agent gets a room the moment it is launched. Parallel calls in the same message form a step; 2+ steps form a workflow with a chief room and animated cables. You can also group agents explicitly with `[workflow:name step:n]` markers.
 - **Exact diffs** — Edit/Write patches with line numbers and syntax highlighting, plus `+N/−M` per file, agent and workflow.
+- **Usage like `/usage`, per session**: the share that went to each skill, sub-agent, plugin and MCP server (Claude Code's own attribution, same weighting), the share spent above 150k context, and the last `/context` breakdown.
 - **Context gauge** (same formula as Claude Code), tokens/min sparkline, cost, todo lists, compactions, permission prompts ("waiting for you"), optional live text streaming.
 - **Four views** — Base (PixiJS game scene), List, Timeline (Gantt of every tool call) and Files. Plus a live journal, toasts and keyboard shortcuts.
 - **Guided demo** — click **▶ Demo** for a narrated, 3-minute A-to-Z tour.
@@ -55,7 +56,7 @@ claude --plugin-dir /path/to/clawd-base
 | List view | the same information as plain, accessible cards |
 | Timeline | one row per agent (grouped by workflow), one bar per tool call coloured by kind, step markers, "now" line |
 | Files | every file touched in the session with counters, agents and diffs |
-| Click a room | side panel: full prompt, model, status, todo list, context, tool timeline and stats, files with per-file diffs, token breakdown, sub-agents |
+| Click a room | side panel: full prompt, model, status, todo list, context, tool timeline and stats, files with per-file diffs, token breakdown, sub-agents; for the main room, usage by skill / sub-agent / plugin / MCP server |
 | Mouse | wheel = integer zoom (pixel-perfect), drag = pan; at the lowest zoom rooms show big labels |
 | Keyboard | `Tab` rooms · `Enter` open · `Esc` close · `1`–`4` views · `J` journal |
 | Follow activity | the camera glides to the most recently active room |
@@ -114,7 +115,8 @@ Claude Code ──hooks──▶ scripts/send-event.mjs ──POST /api/hook─�
 
 Every fact (from a hook or a transcript line) becomes a `NormalizedEvent`, reduced idempotently: the same fact from both sources, or replayed, counts once. Formats were verified on Claude Code 2.1.288 — including real captured payloads and the zod schemas embedded in the binary — see [`docs/FINDINGS.md`](docs/FINDINGS.md).
 
-- **Tokens**: transcripts write one line per content block with the same `usage`, so usage is deduplicated by `message.id`. Context = `input + cache_creation + cache_read` of the latest request; the window is inferred (200k, or 1M once a context above 200k is seen).
+- **Tokens**: transcripts write one line per content block with the same `usage`, so usage is deduplicated by `message.id`. Context = `input + cache_creation + cache_read` of the latest request; the window comes from the model (Opus 4.7+, Sonnet 5+, Fable: 1M) or `/context`.
+- **Usage shares**: Claude Code writes `attributionSkill` / `attributionAgent` / `attributionPlugin` / `attributionMcpServer` on each assistant line. Each request weighs `(cache read + input × 10 + cache write × 12.5 + output × 50) × model tier` (Haiku 1, Sonnet 3, Opus 5, Fable 10), as `/usage` does (2.1.289).
 - **Diffs**: tool `structuredPatch` first, then a PreToolUse snapshot vs disk, then old/new strings.
 - **Workflows**: explicit markers > native `Workflow` tool > heuristic (same assistant message = one parallel step; consecutive steps in the same user turn; 2+ steps = workflow).
 - **Agents** can be resumed after finishing (SendMessage, coordinator): any newer activity brings them back to "running".

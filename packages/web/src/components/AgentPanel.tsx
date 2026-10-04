@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { animationFor, type Agent, type FileChange, type Message, type ToolEvent } from '@dash/shared';
+import { animationFor, sharesList, type Agent, type FileChange, type Message, type Session, type ToolEvent } from '@dash/shared';
 import { t } from '../i18n/index.ts';
 import { agentFileChanges, agentLabel, agentTools, conversation, data, mascotSeed, useDash } from '../state.ts';
-import { basename, formatDuration, formatTime, modelBadge } from '../format.ts';
+import { basename, formatDuration, formatTime, formatTokens, modelBadge } from '../format.ts';
 import { MascotCanvas } from './MascotCanvas.tsx';
 import { TokenBreakdown } from './TokenBreakdown.tsx';
 import { DiffView } from './DiffView.tsx';
@@ -122,6 +122,84 @@ function ToolStats({ tools }: { tools: ToolEvent[] }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+const GROUPS = ['skills', 'agents', 'plugins', 'mcpServers'] as const;
+const GROUP_COLOR: Record<(typeof GROUPS)[number], string> = { skills: CATEGORY_COLOR.edit, agents: CATEGORY_COLOR.agent, plugins: CATEGORY_COLOR.other, mcpServers: CATEGORY_COLOR.bash };
+
+/** What the session's usage went to, like Claude Code's /usage: skills, sub-agents, plugins, MCP servers. */
+function Consumption({ session }: { session: Session }) {
+  const sh = session.usageShares;
+  const ctx = session.contextUsage;
+  if (sh.total <= 0 && !ctx) return null;
+  const pct = (v: number) => Math.round((v / sh.total) * 100);
+  const behaviors = [
+    [pct(sh.longContext), t.usageLongCtx],
+    [pct(sh.subagents), t.usageSubagents],
+    [pct(sh.cacheMiss), t.usageCacheMiss],
+  ] as const;
+  const groups = GROUPS.map((g) => [g, sharesList(sh[g], sh.total)] as const).filter(([, list]) => list.length > 0);
+  return (
+    <section>
+      <h3 title={t.consumptionHint}>
+        {t.consumption} <span className="muted small">ⓘ</span>
+      </h3>
+      {sh.total > 0 && (
+        <>
+          <ul className="usage-behaviors small">
+            {behaviors.filter(([p]) => p > 0).map(([p, label]) => (
+              <li key={label(t.pct(p))}>{label(t.pct(p))}</li>
+            ))}
+          </ul>
+          {groups.length ? (
+            <table className="stats-table consumers">
+              {groups.map(([g, list]) => (
+                <tbody key={g}>
+                  <tr className="usage-group">
+                    <th>{t.usageGroups[g]}</th>
+                    <th />
+                    <th className="num muted small">{t.pctUsage}</th>
+                  </tr>
+                  {list.slice(0, 8).map((x) => (
+                    <tr key={x.name}>
+                      <td className="stats-name" title={x.name}>{g === 'skills' ? `/${x.name}` : x.name}</td>
+                      <td className="stats-bar-cell">
+                        <span className="stats-bar" style={{ width: `${x.pct}%`, background: GROUP_COLOR[g] }} />
+                      </td>
+                      <td className="num">{t.pct(x.pct)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
+            </table>
+          ) : (
+            <p className="muted small">{t.noAttribution}</p>
+          )}
+        </>
+      )}
+      {ctx ? (
+        <>
+          <h4 className="small muted">{t.contextAt(formatTime(ctx.at))}</h4>
+          <table className="stats-table">
+            <tbody>
+              {[...ctx.categories].sort((a, b) => b.tokens - a.tokens).map((c) => (
+                <tr key={c.name}>
+                  <td className="stats-name">{t.ctxCategory[c.name] ?? c.name}</td>
+                  <td className="stats-bar-cell">
+                    <span className="stats-bar" style={{ width: `${(c.tokens / (ctx.total || 1)) * 100}%`, background: CATEGORY_COLOR.other }} />
+                  </td>
+                  <td className="num">{formatTokens(c.tokens)}</td>
+                  <td className="num muted">{((c.tokens / ctx.window) * 100).toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : (
+        <p className="muted small">{t.contextTip}</p>
+      )}
+    </section>
   );
 }
 
@@ -295,6 +373,7 @@ export function AgentPanel({ agent }: { agent: Agent }) {
         {agent.contextTokens > 0 && <ContextGauge used={agent.contextTokens} window={agent.contextWindow || (data.sessions.get(agent.sessionId)?.contextWindow ?? 200_000)} compactions={agent.compactions} wide />}
       </section>
 
+      {agent.kind === 'main' && session && <Consumption session={session} />}
       <SubAgents agent={agent} />
       {agent.kind === 'main' && <SessionTasks sessionId={agent.sessionId} />}
 

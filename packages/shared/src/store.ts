@@ -6,6 +6,7 @@ import { UsageLedger, WINDOW_1M, WINDOW_200K, contextWindowFor } from './usage.t
 import { hashString } from './mascot.ts';
 import { LIMITS, truncateText } from './truncate.ts';
 import { AGENT_TOOLS } from './transcript.ts';
+import { addRequest, emptyShares, type ChargedRequest } from './consumption.ts';
 import { detectWorkflows, nativeWorkflowName, type NativeWorkflowCall, type SpawnRecord } from './workflow.ts';
 
 const DIFF_RANK: Record<FileChange['diffSource'], number> = { none: 0, strings: 1, snapshot: 2, structuredPatch: 3 };
@@ -170,6 +171,8 @@ export class StateStore {
   private readonly dequeued = new Set<string>();
   /** Context window set by an authoritative source (model identity, /context): wins over the model guess. */
   private readonly pinnedWindow = new Map<string, number>();
+  /** Requests already counted in each session's usage shares, by message id (replays must not double them). */
+  private readonly charged = new Map<string, Map<string, ChargedRequest>>();
 
   private readonly dirty = new Map<string, { kind: EntityKind; id: string }>();
   private readonly removals = new Map<string, Removal>();
@@ -278,6 +281,8 @@ export class StateStore {
         usageTimeline: { start: Math.floor(at / MINUTE) * MINUTE, buckets: [] },
         contextWindow: WINDOW_200K,
         tasks: [],
+        usageShares: emptyShares(),
+        contextUsage: null,
         narration: null,
       };
       this.sessions.set(id, s);
@@ -469,6 +474,7 @@ export class StateStore {
       this.remove('message', mid);
     }
     this.messageQueue.delete(id);
+    this.charged.delete(id);
     for (const [tu, holder] of this.spawns) if (agentIds.has(holder)) this.spawns.delete(tu);
     for (const [k, v] of this.tools) if (v.sessionId === id) { this.tools.delete(k); this.remove('tool', k); }
     for (const [k, v] of this.files) if (v.sessionId === id) { this.files.delete(k); this.remove('file', k); }
@@ -849,6 +855,9 @@ export class StateStore {
         this.mark('agent', a.id);
         break;
       }
+      case 'context.usage':
+        if (!s.contextUsage || ev.usage.at >= s.contextUsage.at) s.contextUsage = ev.usage;
+        break;
       case 'usage': {
         const a = this.ensureAgent(s.id, ev.agentId, ev.at);
         this.revive(a, ev.at);
@@ -856,6 +865,14 @@ export class StateStore {
         if (delta) {
           a.usage = this.ledger(a.id).total;
           this.addToTimeline(s, ev.at, delta.total);
+          // Latest usage of this request replaces the one counted before.
+          let reqs = this.charged.get(s.id);
+          if (!reqs) this.charged.set(s.id, (reqs = new Map()));
+          const prev = reqs.get(ev.messageId);
+          const req: ChargedRequest = { usage: ev.usage, model: ev.model ?? prev?.model ?? null, sub: a.kind === 'sub', attribution: ev.attribution ?? prev?.attribution ?? null };
+          if (prev) addRequest(s.usageShares, prev, -1);
+          addRequest(s.usageShares, req, 1);
+          reqs.set(ev.messageId, req);
         }
         // Context = size of the latest request (same formula as Claude Code's indicator).
         if (ev.at >= a.contextAt) {

@@ -1,4 +1,5 @@
-import type { FileChange, Narration, TodoItem, TokenUsage } from './types.ts';
+import type { ContextUsage, FileChange, Narration, TodoItem, TokenUsage } from './types.ts';
+import type { Attribution } from './consumption.ts';
 
 /**
  * Normalized event stream. Both hook payloads and transcript lines are converted
@@ -59,7 +60,7 @@ export type NormalizedEvent =
       durationMs?: number | null;
       interrupted?: boolean;
     })
-  | (Base & { kind: 'usage'; agentId: string; messageId: string; model: string | null; usage: TokenUsage })
+  | (Base & { kind: 'usage'; agentId: string; messageId: string; model: string | null; usage: TokenUsage; attribution?: Attribution | null })
   | (Base & { kind: 'assistant.text'; agentId: string; text: string })
   /** Claude Code's prompt queue (messages typed while Claude works). */
   | (Base & { kind: 'message.queue'; agentId: string; op: 'enqueue' | 'dequeue' | 'remove'; text: string | null })
@@ -67,6 +68,8 @@ export type NormalizedEvent =
   | (Base & { kind: 'message.inject'; agentId: string; text: string })
   /** Authoritative context window for an agent (model identity, /context). */
   | (Base & { kind: 'context.window'; agentId: string; window: number })
+  /** `/context` breakdown. */
+  | (Base & { kind: 'context.usage'; agentId: string; usage: ContextUsage })
   | (Base & { kind: 'turn.end'; agentId: string; lastMessage?: string | null })
   | (Base & { kind: 'file.change'; change: FileChange })
   | (Base & { kind: 'notification'; message: string; notificationType: string | null })

@@ -7,7 +7,7 @@
  * transport) and by `npm run simulate` (HTTP transport).
  */
 import { randomUUID } from 'node:crypto';
-import { makeUsage, type FocusTarget, type Narration, type NarrationFocus, type NormalizedEvent } from '@dash/shared';
+import { makeUsage, type Attribution, type FocusTarget, type Narration, type NarrationFocus, type NormalizedEvent } from '@dash/shared';
 
 export interface DemoTransport {
   hook(payload: Record<string, unknown>): Promise<void>;
@@ -46,6 +46,8 @@ export class Sim {
   private msg = 0;
   /** Main thread context, grows with the session (for the gauge and the compaction). */
   private context = 18_000;
+  /** Sub-agent types, for the usage attribution Claude Code writes on their requests. */
+  private readonly agentTypes = new Map<string, string>();
   /** Demo time slept so far (ms, unaffected by speed and pauses): paces the narration. */
   private demoTime = 0;
 
@@ -116,8 +118,10 @@ export class Sim {
     return this.events([{ kind: 'assistant.text', sessionId: this.sessionId, at: Date.now(), source: 'sim', agentId: agentId ?? this.sessionId, text }]);
   }
 
-  /** One assistant message worth of token usage. */
-  usage(agentId: string | null, model: string, scale = 1): Promise<void> {
+  /** One assistant message worth of token usage (attributed like Claude Code does: sub-agent type, skill, MCP server). */
+  usage(agentId: string | null, model: string, scale = 1, attribution: Partial<Attribution> = {}): Promise<void> {
+    const agent = agentId ? (this.agentTypes.get(agentId) ?? null) : null;
+    const attr = { agent, skill: null, plugin: null, mcpServer: null, ...attribution };
     const main = agentId === null;
     const cacheRead = main ? (this.context += rnd(2500, 7000)) : Math.round(rnd(12_000, 60_000) * scale);
     return this.events([
@@ -130,6 +134,7 @@ export class Sim {
         messageId: `msg_sim_${this.tag}_${++this.msg}`,
         model,
         usage: makeUsage(rnd(1, 40), Math.round(rnd(120, 900) * scale), rnd(0, 1) ? rnd(2000, 12000) : 0, cacheRead),
+        attribution: attr.agent || attr.skill || attr.plugin || attr.mcpServer ? attr : null,
       },
     ]);
   }
@@ -205,6 +210,7 @@ export class Sim {
   async spawn(parent: string | null, type: string, description: string, prompt: string, model: string): Promise<{ agentId: string; toolUseId: string }> {
     const toolUseId = `toolu_sim_${this.tag}_${++this.tool}`;
     const agentId = `a${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    this.agentTypes.set(agentId, type);
     await this.hook('PreToolUse', parent, { tool_name: 'Agent', tool_use_id: toolUseId, tool_input: { subagent_type: type, description, prompt, model } });
     await this.sleep(rnd(200, 500));
     await this.hook('SubagentStart', null, { agent_id: agentId, agent_type: type });
@@ -453,10 +459,10 @@ async function tour(s: Sim, L: (typeof TEXT)[DemoLocale]): Promise<void> {
 
   await step(4, main, async () => {
     await s.read(null, 'src/payment/stripe.ts');
-    await s.usage(null, opus);
+    await s.usage(null, opus, 1, { skill: 'toolkit:debug', plugin: 'toolkit' });
     await s.read(null, 'src/lib/money.ts');
     await s.toolCall(null, 'Grep', { pattern: 'chargeCard', path: L.cwd }, { ms: 1500 });
-    await s.usage(null, opus);
+    await s.usage(null, opus, 1, { skill: 'toolkit:debug', plugin: 'toolkit' });
   });
 
   await step(5, main, async () => {
@@ -479,7 +485,7 @@ async function tour(s: Sim, L: (typeof TEXT)[DemoLocale]): Promise<void> {
   await step(8, main, async () => {
     await s.edit(null, 'src/lib/money.ts');
     await s.bash(null, 'npm test -- payment');
-    await s.usage(null, opus);
+    await s.usage(null, opus, 1, { mcpServer: 'browser' });
     mark(1, 'completed');
     mark(2, 'in_progress');
     await s.todos(null, plan);

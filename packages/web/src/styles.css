@@ -279,6 +279,9 @@ a { color: var(--accent); }
 .stats-table { border-collapse: collapse; width: 100%; font-size: 12px; }
 .stats-table td { padding: 1px 4px; }
 .stats-name { white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.consumers .stats-name { max-width: 220px; }
+.usage-behaviors { margin: 0 0 6px; padding-left: 16px; }
+.usage-group th { text-align: left; font-weight: 600; padding: 6px 4px 1px; }
 .stats-bar-cell { width: 45%; }
 .stats-bar { display: block; height: 8px; min-width: 2px; }
 .tool-dot { width: 8px; height: 8px; flex: none; }

@@ -14,6 +14,7 @@ describe('identifyTranscript', () => {
     expect(identifyTranscript(`/h/.claude/projects/-Users-x/${SID}.jsonl`)).toEqual({ sessionId: SID, agentId: null, kind: 'main' });
     expect(identifyTranscript(`/h/p/-x/${SID}/subagents/agent-a1b2c3d4e5f6a7b8c.jsonl`)).toEqual({ sessionId: SID, agentId: 'a1b2c3d4e5f6a7b8c', kind: 'subagent' });
     expect(identifyTranscript(`/h/p/-x/${SID}/subagents/agent-a1b2c3d4e5f6a7b8c.meta.json`)).toEqual({ sessionId: SID, agentId: 'a1b2c3d4e5f6a7b8c', kind: 'meta' });
+    expect(identifyTranscript(`/h/p/-x/${SID}/subagents/workflows/wf_1a2b/agent-a1b2c3.jsonl`)).toEqual({ sessionId: SID, agentId: 'a1b2c3', kind: 'subagent' });
     expect(identifyTranscript('/h/p/-x/notes.txt')).toBeNull();
   });
 });

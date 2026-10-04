@@ -196,8 +196,38 @@ export interface Session {
   /** Inferred context window (200k, or 1M once a context above 200k has been seen). */
   contextWindow: number;
   tasks: SessionTask[];
+  /** What the session's usage went to, weighted like Claude Code's `/usage`. */
+  usageShares: UsageShares;
+  /** Breakdown written by the latest `/context` (system prompt, MCP tools, skills, messages…). */
+  contextUsage: ContextUsage | null;
   /** Guided demo caption (only set by the built-in demo). */
   narration: Narration | null;
+}
+
+/**
+ * Weighted usage (relative token prices × model tier, as in `/usage`), in total and per skill, sub-agent,
+ * plugin and MCP server Claude Code attributed requests to. Divide by `total` for a share.
+ */
+export interface UsageShares {
+  total: number;
+  /** Requests made by sub-agents. */
+  subagents: number;
+  /** Requests sent with more than 150k tokens of context. */
+  longContext: number;
+  /** Requests with more than 100k uncached input tokens (cache miss). */
+  cacheMiss: number;
+  agents: Record<string, number>;
+  skills: Record<string, number>;
+  plugins: Record<string, number>;
+  mcpServers: Record<string, number>;
+}
+
+export interface ContextUsage {
+  at: number;
+  total: number;
+  window: number;
+  /** Categories as `/context` names them, free space and buffer excluded. */
+  categories: Array<{ name: string; tokens: number }>;
 }
 
 /** A room (or set of rooms) the guided demo camera can frame. */

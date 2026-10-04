@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0
+
+- Usage like Claude Code's `/usage`, per session: the share of the session's usage that went to each skill, sub-agent, plugin and MCP server, from the attribution Claude Code writes in transcripts and with the same weighting (token prices × model tier); also the share spent above 150k context, by sub-agents, on cache misses, and the latest `/context` breakdown (system prompt, MCP tools, skills, agents, messages…). Shown in the main room's panel; the room's board shows the top consumers.
+- Agents of the native `Workflow` tool (`subagents/workflows/<run>/`) are now read: their rooms, tools and tokens were missing.
+
 ## 1.2.0
 
 - Context window per model, like Claude Code's catalog: Opus 4.7+, Sonnet 5+ and Fable are 1M (the gauge said 200k on 1M sessions); `/context` and the model identity in the transcript are used when present; sub-agents get their own window.

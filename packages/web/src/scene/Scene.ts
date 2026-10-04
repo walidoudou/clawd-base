@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite, Text, Texture, TilingSprite } from 'pixi.js';
-import { animationFor, formatTokens, mulberry32, type Agent, type Anim, type Message, type NarrationFocus, type Workflow } from '@dash/shared';
+import { animationFor, formatTokens, mulberry32, sharesList, type Agent, type Anim, type Message, type NarrationFocus, type Workflow } from '@dash/shared';
 import { t } from '../i18n/index.ts';
 import { activeStepIndex, agentLabel, data, isActive, isArchived, mascotSeed, sessionAgents, sessionWorkflows, useDash } from '../state.ts';
 import { basename, formatDuration, modelBadge, preview } from '../format.ts';
@@ -855,6 +855,24 @@ export class BaseScene {
     }
     const reply = lastReply?.text ?? a.lastMessage ?? '';
     if (reply) block(`◂ ${t.labelled('Claude', '')}`, reply, C.reply, 2);
+    // what the session's usage went to, like /usage (skills, sub-agents, MCP servers)
+    if (main && session && session.usageShares.total > 0) {
+      const sh = session.usageShares;
+      const top = [
+        ...sharesList(sh.agents, sh.total),
+        ...sharesList(sh.skills, sh.total).map((x) => ({ ...x, name: `/${x.name}` })),
+        ...sharesList(sh.mcpServers, sh.total).map((x) => ({ ...x, name: `MCP ${x.name}` })),
+      ].sort((x, y) => y.pct - x.pct);
+      const prefix = `▲ ${t.labelled(t.topShort, '')}`;
+      // As many whole entries as fit on the line.
+      let label = '';
+      for (const x of top.slice(0, 3)) {
+        const next = `${label ? `${label} · ` : ''}${x.name} ${t.pct(x.pct)}`;
+        if (label && prefix.length + next.length > cols) break;
+        label = next;
+      }
+      if (label) block(prefix, label, C.queued, 1);
+    }
     // 6. last task done (recent)
     const lastTask = [...msgs].reverse().find((m) => m.role === 'task');
     if (lastTask && now - lastTask.at < 15 * 60_000) push(`✓ ${lastTask.text}`, C.todo);

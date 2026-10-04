@@ -139,7 +139,7 @@ describe('watcher: dormant transcripts', () => {
     await w.start();
     const slug = join(dir, '-tmp-rescan');
     mkdirSync(join(slug, 'memory'), { recursive: true });
-    const deep = join(slug, 'a', 'b', 'c', 'd');
+    const deep = join(slug, 'a', 'b', 'c', 'd', 'e');
     mkdirSync(deep, { recursive: true });
     const old = join(slug, `${sid(7)}.jsonl`);
     writeFileSync(old, `${promptLine(0, 'vieux')}\n`);
